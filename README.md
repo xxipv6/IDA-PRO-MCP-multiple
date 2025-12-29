@@ -1,5 +1,11 @@
 # IDA MCP Server 使用说明
 
+支持多文件分析
+
+![image-20251229204640370](https://xipv6.oss-cn-hangzhou.aliyuncs.com/img/image-20251229204640370.png)
+
+![image-20251229204647844](https://xipv6.oss-cn-hangzhou.aliyuncs.com/img/image-20251229204647844.png)
+
 ## 快速开始
 
 ### 1. 环境要求
