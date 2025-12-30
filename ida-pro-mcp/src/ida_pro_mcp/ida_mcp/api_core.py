@@ -125,7 +125,16 @@ def test_idb_meta():
 def lookup_funcs(
     queries: Annotated[list[str] | str, "Address(es) or name(s)"],
 ) -> list[dict]:
-    """Get functions by address or name (auto-detects)"""
+    """Get functions by address or name (auto-detects hex addresses vs names)
+
+    Args:
+        queries: Address (hex like "0x401000") or function name, or list of either
+
+    Example:
+        lookup_funcs("main")           # Find by name
+        lookup_funcs("0x401000")       # Find by address
+        lookup_funcs(["main", "0x401000"])  # Find multiple
+    """
     queries = normalize_list_input(queries)
 
     # Treat empty/"*" as "all functions"
@@ -402,7 +411,19 @@ def list_funcs(
         "List functions with optional filtering and pagination",
     ],
 ) -> list[Page[Function]]:
-    """List functions"""
+    """List functions with optional filtering and pagination
+
+    Args:
+        queries: Query object(s) with optional keys:
+            - offset: Starting index (default 0)
+            - count: Max items to return (default 100)
+            - filter: Name pattern to match (wildcards supported)
+
+    Example:
+        list_funcs({"offset": 0, "count": 10})              # First 10 functions
+        list_funcs({"filter": "win*"})                      # Functions starting with "win"
+        list_funcs("main")                                  # Shorthand for {"filter": "main"}
+    """
     queries = normalize_dict_list(
         queries, lambda s: {"offset": 0, "count": 50, "filter": s}
     )
@@ -464,7 +485,19 @@ def list_globals(
         "List global variables with optional filtering and pagination",
     ],
 ) -> list[Page[Global]]:
-    """List globals"""
+    """List global variables with optional filtering and pagination
+
+    Args:
+        queries: Query object(s) with optional keys:
+            - offset: Starting index (default 0)
+            - count: Max items to return (default 100)
+            - filter: Name pattern to match (wildcards supported)
+
+    Example:
+        list_globals({"offset": 0, "count": 10})            # First 10 globals
+        list_globals({"filter": "g_*"})                     # Globals starting with "g_"
+        list_globals("counter")                             # Shorthand for {"filter": "counter"}
+    """
     queries = normalize_dict_list(
         queries, lambda s: {"offset": 0, "count": 50, "filter": s}
     )

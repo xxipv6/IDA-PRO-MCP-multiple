@@ -86,7 +86,7 @@ def run_idalib_session(
         )
 
         if result:
-            logger.error(f"Failed to open database: {file_path}")
+            logger.error(f"Failed to open database: {file_path} (error code: {result})")
             signal_ready()  # Signal even on failure so parent doesn't hang
             return
 
@@ -133,24 +133,28 @@ def run_idalib_session(
         if str(pkg_root) not in sys.path:
             sys.path.insert(0, str(pkg_root))
 
+        logger.info(f"Package root: {pkg_root}")
+        logger.info(f"Importing MCP server from ida_pro_mcp.ida_mcp.rpc")
+
         # Now we can import normally - inside IDALib, idaapi is available
         # so the ida_mcp package imports will work
         from ida_pro_mcp.ida_mcp.rpc import set_download_base_url, MCP_SERVER
 
         set_download_base_url(f"http://127.0.0.1:{port}")
 
-        # Signal that we're ready
-        signal_ready()
         logger.info(f"MCP server starting on port {port}")
 
-        # Start the MCP server (blocking call)
+        # Signal ready before starting the blocking serve call
+        signal_ready()
+        logger.info(f"Session ready signal sent, starting MCP server")
+
+        # Start the MCP server in blocking mode (runs on main thread)
+        # This ensures IDA API calls work correctly without threading issues
         try:
             MCP_SERVER.serve(host="127.0.0.1", port=port, background=False)
-        except Exception as e:
-            logger.error(f"MCP server error: {e}")
         finally:
-            # Clean shutdown
-            logger.info("Closing IDA database...")
+            # Clean shutdown when serve() returns
+            logger.info("MCP server stopped, closing IDA database...")
             idapro.close_database()
             logger.info("Session closed")
 

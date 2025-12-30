@@ -1,5 +1,0 @@
-[console_scripts]
-ida-mcp-test = ida_pro_mcp.test:main
-ida-pro-mcp = ida_pro_mcp.server:main
-idalib-mcp = ida_pro_mcp.idalib_server:main
-idalib-mcp-multisession = ida_pro_mcp.multiserver:main

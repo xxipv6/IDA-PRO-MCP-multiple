@@ -36,7 +36,21 @@ from .tests import (
 @tool
 @idasync
 def set_comments(items: list[CommentOp] | CommentOp):
-    """Set comments at addresses (both disassembly and decompiler views)"""
+    """Set comments at addresses (both disassembly and decompiler views)
+
+    Args:
+        items: List of comment operations. Each operation must have:
+            - addr: Address (hex string like "0x401000" or decimal)
+            - comment: Comment text to set
+
+    Example:
+        items = [
+            {"addr": "0x401000", "comment": "Entry point"},
+            {"addr": "0x401234", "comment": "Network request handler"}
+        ]
+        # Or single item
+        items = {"addr": "0x401000", "comment": "Entry point"}
+    """
     if isinstance(items, dict):
         items = [items]
 
@@ -146,7 +160,21 @@ def test_set_comment_roundtrip():
 @tool
 @idasync
 def patch_asm(items: list[AsmPatchOp] | AsmPatchOp) -> list[dict]:
-    """Patch assembly instructions at addresses"""
+    """Patch assembly instructions at addresses
+
+    Args:
+        items: List of assembly patch operations. Each operation must have:
+            - addr: Address (hex string like "0x401000" or decimal)
+            - asm: Assembly instruction(s), semicolon-separated for multiple
+
+    Example:
+        items = [
+            {"addr": "0x401000", "asm": "nop"},
+            {"addr": "0x401004", "asm": "mov eax, 1; ret"}
+        ]
+        # Or single item
+        items = {"addr": "0x401000", "asm": "nop"}
+    """
     if isinstance(items, dict):
         items = [items]
 
@@ -214,7 +242,23 @@ def test_patch_asm():
 @tool
 @idasync
 def rename(batch: RenameBatch) -> dict:
-    """Unified rename operation for functions, globals, locals, and stack variables"""
+    """Unified rename operation for functions, globals, locals, and stack variables
+
+    Args:
+        batch: Dictionary with rename operations. Supports four categories:
+            - func: List of function renames: [{"addr": "0x401000", "name": "new_name"}]
+            - data: List of global renames: [{"old": "old_name", "new": "new_name"}]
+            - local: List of local variable renames: [{"func_addr": "0x401000", "old": "var", "new": "new_var"}]
+            - stack: List of stack variable renames: [{"func_addr": "0x401000", "old": "var", "new": "new_var"}]
+
+    Example:
+        batch = {
+            "func": [{"addr": "0x401000", "name": "main"}],
+            "data": [{"old": "var1", "new": "g_counter"}],
+            "local": [{"func_addr": "0x401000", "old": "argc", "new": "arg_count"}],
+            "stack": [{"func_addr": "0x401000", "old": "var_0", "new": "buffer"}]
+        }
+    """
 
     def _normalize_items(items):
         """Convert single item or None to list"""

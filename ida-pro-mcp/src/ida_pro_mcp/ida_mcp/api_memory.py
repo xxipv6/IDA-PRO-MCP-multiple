@@ -31,7 +31,17 @@ from .tests import (
 @tool
 @idasync
 def get_bytes(regions: list[MemoryRead] | MemoryRead) -> list[dict]:
-    """Read bytes from memory addresses"""
+    """Read raw bytes from memory addresses
+
+    Args:
+        regions: List of memory read operations. Each operation must have:
+            - addr: Address as hex string like "0x401000"
+            - size: Number of bytes to read
+
+    Example:
+        get_bytes({"addr": "0x401000", "size": 16})  # Read 16 bytes from address
+        get_bytes([{"addr": "0x401000", "size": 16}, {"addr": "0x402000", "size": 32}])
+    """
     if isinstance(regions, dict):
         regions = [regions]
 
@@ -83,7 +93,15 @@ def test_get_bytes_invalid():
 def get_u8(
     addrs: Annotated[list[str] | str, "Addresses to read 8-bit unsigned integers from"],
 ) -> list[dict]:
-    """Read 8-bit unsigned integers from memory addresses"""
+    """Read 8-bit unsigned integers (bytes) from memory addresses
+
+    Args:
+        addrs: Address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        get_u8("0x401000")  # Read byte from single address
+        get_u8(["0x401000", "0x401001"])  # Read bytes from multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -122,7 +140,15 @@ def get_u16(
         list[str] | str, "Addresses to read 16-bit unsigned integers from"
     ],
 ) -> list[dict]:
-    """Read 16-bit unsigned integers from memory addresses"""
+    """Read 16-bit unsigned integers (words) from memory addresses
+
+    Args:
+        addrs: Address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        get_u16("0x401000")  # Read 16-bit value from single address
+        get_u16(["0x401000", "0x401002"])  # Read from multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -161,7 +187,15 @@ def get_u32(
         list[str] | str, "Addresses to read 32-bit unsigned integers from"
     ],
 ) -> list[dict]:
-    """Read 32-bit unsigned integers from memory addresses"""
+    """Read 32-bit unsigned integers (dwords) from memory addresses
+
+    Args:
+        addrs: Address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        get_u32("0x401000")  # Read 32-bit value from single address
+        get_u32(["0x401000", "0x401004"])  # Read from multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -200,7 +234,15 @@ def get_u64(
         list[str] | str, "Addresses to read 64-bit unsigned integers from"
     ],
 ) -> list[dict]:
-    """Read 64-bit unsigned integers from memory addresses"""
+    """Read 64-bit unsigned integers (qwords) from memory addresses
+
+    Args:
+        addrs: Address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        get_u64("0x401000")  # Read 64-bit value from single address
+        get_u64(["0x401000", "0x401008"])  # Read from multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -237,7 +279,15 @@ def test_get_u64():
 def get_string(
     addrs: Annotated[list[str] | str, "Addresses to read strings from"],
 ) -> list[dict]:
-    """Read strings from memory addresses"""
+    """Read null-terminated strings from memory addresses
+
+    Args:
+        addrs: Address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        get_string("0x401000")  # Read string from single address
+        get_string(["0x401000", "0x402000"])  # Read strings from multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -362,7 +412,17 @@ def test_get_global_value():
 @tool
 @idasync
 def patch(patches: list[MemoryPatch] | MemoryPatch) -> list[dict]:
-    """Patch bytes at memory addresses with hex data"""
+    """Patch bytes at memory addresses with hexadecimal data
+
+    Args:
+        patches: List of patch operations. Each operation must have:
+            - addr: Address as hex string like "0x401000"
+            - data: Hex bytes to write (e.g. "90" for NOP, "90 90" for two NOPs)
+
+    Example:
+        patch({"addr": "0x401000", "data": "90"})  # Write single NOP byte
+        patch([{"addr": "0x401000", "data": "90 90"}, {"addr": "0x401004", "data": "B8 01 00 00 00"}])
+    """
     if isinstance(patches, dict):
         patches = [patches]
 

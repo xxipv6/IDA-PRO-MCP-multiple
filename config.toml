@@ -1,0 +1,27 @@
+# IDA MCP launcher configuration
+# Relative paths are resolved against this file's directory.
+
+# Main MCP HTTP port
+port = 8745
+
+# Base port for session workers
+base_session_port = 10000
+
+# Directory containing binaries to preload (PE/ELF)
+analyze_dir = "analyze"
+
+# IDA installation path (optional). Leave empty to use environment.
+# Use forward slashes to avoid escape issues on Windows
+ida_dir = "E:/Tools/BinAny/IDA9.2"
+
+# uv executable to use
+uv = "uv"
+
+# Skip port availability check
+skip_port_check = false
+
+# Start without preloading files (manual session_create)
+no_preload = false
+
+# Path to ida-pro-mcp project (contains pyproject/uv.lock)
+mcp_dir = "ida-pro-mcp"

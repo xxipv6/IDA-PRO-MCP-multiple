@@ -101,6 +101,13 @@ class Session:
         """Check if session is closed"""
         return self.status == SessionStatus.CLOSED
 
+    @property
+    def is_alive(self) -> bool:
+        """Check if the session process is still running"""
+        if self._process is None:
+            return False
+        return self._process.poll() is None
+
     def start(self) -> None:
         """Start the IDA Pro analysis process"""
         with self._lock:
@@ -281,9 +288,20 @@ class SessionManager:
                 logger.error(f"Error in cleanup loop: {e}")
 
     def _cleanup_idle_sessions(self) -> None:
-        """Close sessions that have been idle for too long"""
+        """Close sessions that have been idle for too long or terminated"""
         with self._lock:
             for session_id, session in list(self._sessions.items()):
+                # Check if process has terminated
+                if session.status == SessionStatus.READY and not session.is_alive:
+                    logger.warning(
+                        f"Session {session_id} process terminated unexpectedly, cleaning up..."
+                    )
+                    session.status = SessionStatus.ERROR
+                    session.error_message = "Process terminated unexpectedly"
+                    self._close_session_unlocked(session_id)
+                    continue
+
+                # Check idle timeout
                 if session.status == SessionStatus.READY:
                     idle_time = session.get_idle_time()
                     if idle_time > self.session_timeout:
@@ -451,6 +469,11 @@ class SessionManager:
                     raise RuntimeError(
                         f"Session {session_id} is not ready (status: {session.status.value})"
                     )
+                # Check if process is still alive
+                if not session.is_alive:
+                    raise RuntimeError(
+                        f"Session {session_id} process has terminated unexpectedly"
+                    )
                 session.update_activity()
                 return session
         else:
@@ -460,6 +483,11 @@ class SessionManager:
             if session.status != SessionStatus.READY:
                 raise RuntimeError(
                     f"Active session is not ready (status: {session.status.value})"
+                )
+            # Check if process is still alive
+            if not session.is_alive:
+                raise RuntimeError(
+                    f"Active session {session.id} process has terminated unexpectedly"
                 )
             return session
 

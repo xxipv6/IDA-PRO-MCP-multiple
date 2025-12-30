@@ -98,7 +98,15 @@ def _get_cached_strings_dict() -> list[dict]:
 def decompile(
     addrs: Annotated[list[str] | str, "Function addresses to decompile"],
 ) -> list[dict]:
-    """Decompile functions to pseudocode"""
+    """Decompile functions to pseudocode (Hexrays)
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        decompile("0x401000")                          # Single function
+        decompile(["0x401000", "0x402000"])             # Multiple functions
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -176,7 +184,18 @@ def disasm(
     ] = 5000,
     offset: Annotated[int, "Skip first N instructions (default: 0)"] = 0,
 ) -> list[dict]:
-    """Disassemble functions to assembly instructions"""
+    """Disassemble functions to assembly instructions with pagination support
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+        max_instructions: Maximum number of instructions to return per function (5000-50000)
+        offset: Number of instructions to skip before starting collection
+
+    Example:
+        disasm("0x401000")  # Disassemble single function
+        disasm(["0x401000", "0x402000"])  # Disassemble multiple functions
+        disasm("0x401000", max_instructions=100, offset=10)  # Get instructions 10-109
+    """
     addrs = normalize_list_input(addrs)
 
     # Enforce max limit
@@ -383,7 +402,15 @@ def test_disasm_data_segment():
 def xrefs_to(
     addrs: Annotated[list[str] | str, "Addresses to find cross-references to"],
 ) -> list[dict]:
-    """Get all cross-references to specified addresses"""
+    """Get all cross-references pointing to specified addresses
+
+    Args:
+        addrs: Target address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        xrefs_to("0x401000")  # Find all references to address 0x401000
+        xrefs_to(["0x401000", "0x402000"])  # Find references to multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -549,7 +576,15 @@ def test_xrefs_to_field_batch():
 def callees(
     addrs: Annotated[list[str] | str, "Function addresses to get callees for"],
 ) -> list[dict]:
-    """Get all functions called by the specified functions"""
+    """Get all functions called by the specified functions
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        callees("0x401000")  # Get functions called by 0x401000
+        callees(["0x401000", "0x402000"])  # Get callees for multiple functions
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -644,7 +679,15 @@ def test_callees_invalid_address():
 def callers(
     addrs: Annotated[list[str] | str, "Function addresses to get callers for"],
 ) -> list[dict]:
-    """Get all functions that call the specified functions"""
+    """Get all functions that call the specified functions (reverse call graph)
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        callers("0x401000")  # Get functions that call 0x401000
+        callers(["0x401000", "0x402000"])  # Get callers for multiple functions
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -720,7 +763,15 @@ def test_entrypoints():
 def analyze_funcs(
     addrs: Annotated[list[str] | str, "Function addresses to comprehensively analyze"],
 ) -> list[FunctionAnalysis]:
-    """Comprehensive function analysis: decompilation, xrefs, callees, strings, constants, blocks"""
+    """Comprehensive function analysis: decompilation, disassembly, xrefs, callees/callers, strings, constants, basic blocks
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        analyze_funcs("0x401000")  # Analyze single function
+        analyze_funcs(["0x401000", "0x402000"])  # Analyze multiple functions
+    """
     addrs = normalize_list_input(addrs)
     results = []
     for addr in addrs:
@@ -1033,7 +1084,17 @@ def basic_blocks(
     ] = 1000,
     offset: Annotated[int, "Skip first N blocks (default: 0)"] = 0,
 ) -> list[dict]:
-    """Get control flow graph basic blocks for functions"""
+    """Get control flow graph basic blocks for functions with pagination support
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+        max_blocks: Maximum number of blocks to return per function (1000-10000)
+        offset: Number of blocks to skip before starting collection
+
+    Example:
+        basic_blocks("0x401000")  # Get basic blocks for single function
+        basic_blocks("0x401000", max_blocks=50, offset=10)  # Get blocks 10-59
+    """
     addrs = normalize_list_input(addrs)
 
     # Enforce max limit
@@ -1244,7 +1305,21 @@ def search(
     limit: Annotated[int, "Max matches per target (default: 1000, max: 10000)"] = 1000,
     offset: Annotated[int, "Skip first N matches (default: 0)"] = 0,
 ) -> list[dict]:
-    """Search for patterns in the binary (strings, immediate values, or references)"""
+    """Search for patterns in the binary (strings, immediate values, data refs, code refs)
+
+    Args:
+        type: Search type - "string" (substring search), "immediate" (numeric constants),
+              "data_ref" (data references to address), or "code_ref" (code references to address)
+        targets: Search target(s) - string(s) for string search, integer(s) for immediate search,
+                 address string(s) like "0x401000" for ref searches
+        limit: Maximum matches to return per target (1000-10000)
+        offset: Number of matches to skip before starting collection
+
+    Example:
+        search(type="string", targets="password")  # Find strings containing "password"
+        search(type="immediate", targets=0xDEADBEEF)  # Find immediate value
+        search(type="code_ref", targets="0x401000")  # Find code references to address
+    """
     if not isinstance(targets, list):
         targets = [targets]
 

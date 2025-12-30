@@ -141,7 +141,15 @@ def test_structs_list():
 def struct_info(
     names: Annotated[list[str] | str, "Structure names to query"],
 ) -> list[dict]:
-    """Get struct info"""
+    """Get detailed information about structures including members, offsets, and types
+
+    Args:
+        names: Structure name(s) as string(s), or list of structure names
+
+    Example:
+        struct_info("MY_STRUCT")  # Get info for single structure
+        struct_info(["MY_STRUCT", "ANOTHER_STRUCT"])  # Get info for multiple structures
+    """
     names = normalize_list_input(names)
     results = []
 
@@ -234,7 +242,17 @@ def test_struct_info_not_found():
 @tool
 @idasync
 def read_struct(queries: list[StructRead] | StructRead) -> list[dict]:
-    """Read struct fields"""
+    """Read structure field values from memory addresses
+
+    Args:
+        queries: List of struct read operations. Each operation must have:
+            - addr: Memory address as hex string like "0x401000"
+            - struct: Structure name to read (e.g. "MY_STRUCT")
+
+    Example:
+        read_struct({"addr": "0x401000", "struct": "MY_STRUCT"})  # Read single struct
+        read_struct([{"addr": "0x401000", "struct": "MY_STRUCT"}, {"addr": "0x402000", "struct": "ANOTHER_STRUCT"}])
+    """
 
     def parse_addr_struct(s: str) -> dict:
         # Support "addr:struct" or just "addr" (auto-detect struct)
@@ -459,7 +477,22 @@ def test_search_structs():
 @tool
 @idasync
 def apply_types(applications: list[TypeApplication] | TypeApplication) -> list[dict]:
-    """Apply types (function/global/local/stack)"""
+    """Apply types to functions, global variables, local variables, or stack variables
+
+    Args:
+        applications: List of type application operations. Each operation can have:
+            - kind: Type of application - "function", "global", "local", or "stack" (auto-detected if omitted)
+            - addr: Address as hex string like "0x401000"
+            - ty: Type name to apply (e.g. "int", "char*", "MY_STRUCT")
+            - signature: Full function signature (for kind="function")
+            - name: Variable name (for kind="local" or "stack")
+            - variable: Variable name (for kind="local")
+
+    Example:
+        apply_types({"addr": "0x401000", "ty": "int"})  # Apply int type to global
+        apply_types({"addr": "0x401000", "signature": "int foo(int x)"})  # Apply function signature
+        apply_types({"addr": "0x401000", "name": "var", "ty": "char*", "kind": "local"})  # Apply to local var
+    """
 
     def parse_addr_type(s: str) -> dict:
         # Support "addr:typename" format (auto-detects kind)
@@ -617,7 +650,15 @@ def test_apply_types_invalid_address():
 def infer_types(
     addrs: Annotated[list[str] | str, "Addresses to infer types for"],
 ) -> list[dict]:
-    """Infer types"""
+    """Infer types for addresses using Hex-Rays decompiler or size-based heuristics
+
+    Args:
+        addrs: Address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        infer_types("0x401000")  # Infer type for single address
+        infer_types(["0x401000", "0x401004"])  # Infer types for multiple addresses
+    """
     addrs = normalize_list_input(addrs)
     results = []
 

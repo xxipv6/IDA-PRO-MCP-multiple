@@ -36,7 +36,15 @@ from .tests import (
 @tool
 @idasync
 def stack_frame(addrs: Annotated[list[str] | str, "Address(es)"]) -> list[dict]:
-    """Get stack vars"""
+    """Get stack frame variables for functions
+
+    Args:
+        addrs: Function address(es) as hex string(s) like "0x401000", or list of addresses
+
+    Example:
+        stack_frame("0x401000")  # Get stack variables for single function
+        stack_frame(["0x401000", "0x402000"])  # Get stack variables for multiple functions
+    """
     addrs = normalize_list_input(addrs)
     results = []
 
@@ -83,7 +91,20 @@ def test_stack_frame_no_function():
 def declare_stack(
     items: list[StackVarDecl] | StackVarDecl,
 ):
-    """Create stack vars"""
+    """Create new stack variables in function stack frames
+
+    Args:
+        items: List of stack variable declarations. Each declaration must have:
+            - addr: Function address as hex string like "0x401000"
+            - offset: Stack offset as hex string like "0x10"
+            - name: Variable name to create (e.g. "my_local_var")
+            - ty: Type name for the variable (e.g. "int", "char*", "MY_STRUCT")
+
+    Example:
+        declare_stack({"addr": "0x401000", "offset": "0x10", "name": "buffer", "ty": "char*"})
+        declare_stack([{"addr": "0x401000", "offset": "0x10", "name": "var1", "ty": "int"},
+                       {"addr": "0x401000", "offset": "0x14", "name": "var2", "ty": "int"}])
+    """
     items = normalize_dict_list(items)
     results = []
     for item in items:
@@ -128,7 +149,17 @@ def declare_stack(
 def delete_stack(
     items: list[StackVarDelete] | StackVarDelete,
 ):
-    """Delete stack vars"""
+    """Delete stack variables from function stack frames
+
+    Args:
+        items: List of stack variable deletions. Each deletion must have:
+            - addr: Function address as hex string like "0x401000"
+            - name: Variable name to delete (e.g. "my_local_var")
+
+    Example:
+        delete_stack({"addr": "0x401000", "name": "old_var"})  # Delete single variable
+        delete_stack([{"addr": "0x401000", "name": "var1"}, {"addr": "0x401000", "name": "var2"}])
+    """
 
     items = normalize_dict_list(items)
     results = []

@@ -356,7 +356,7 @@ class AutoAnalyzer:
             # 检查服务器连接
             if not await self.server.check_server():
                 logger.error("MCP服务器未运行！")
-                logger.info("请先启动: ida-pro-mcp/start_ida_mcp.bat")
+                logger.info("请先启动: python start.py --no-preload")
                 return
 
             logger.info("已连接到MCP服务器")

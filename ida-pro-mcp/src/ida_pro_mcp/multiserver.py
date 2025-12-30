@@ -138,143 +138,7 @@ class MultiSessionMCPServer:
         manager = get_session_manager()
         session = await manager.get_active_session()
 
-        if not session:
-            # Return only session management tools
-            return {
-                "tools": [
-                    {
-                        "name": "session_create",
-                        "description": "Create a new analysis session",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": {"type": "string"},
-                                "auto_analysis": {"type": "boolean"},
-                                "idb_path": {"type": "string"},
-                            },
-                            "required": ["file_path"],
-                        },
-                    },
-                    {
-                        "name": "session_list",
-                        "description": "List all analysis sessions",
-                        "inputSchema": {"type": "object", "properties": {}},
-                    },
-                    {
-                        "name": "session_switch",
-                        "description": "Switch the active session",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "session_id": {"type": "string"},
-                            },
-                            "required": ["session_id"],
-                        },
-                    },
-                    {
-                        "name": "session_close",
-                        "description": "Close an analysis session",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "session_id": {"type": "string"},
-                            },
-                            "required": ["session_id"],
-                        },
-                    },
-                    {
-                        "name": "session_active",
-                        "description": "Get the active session",
-                        "inputSchema": {"type": "object", "properties": {}},
-                    },
-                    {
-                        "name": "session_status",
-                        "description": "Get session manager status",
-                        "inputSchema": {"type": "object", "properties": {}},
-                    },
-                ]
-            }
-
-        # Forward to active session
-        session_url = f"http://127.0.0.1:{session.port}/mcp"
-
-        try:
-            response = await self.http_client.post(
-                session_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tools/list",
-                    "id": 1,
-                },
-            )
-            response.raise_for_status()
-            result = response.json()
-
-            # Add session management tools to the result
-            if "result" in result and "tools" in result["result"]:
-                # Add session tools at the beginning
-                session_tools = [
-                    {
-                        "name": "session_create",
-                        "description": "Create a new analysis session",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": {"type": "string"},
-                                "auto_analysis": {"type": "boolean"},
-                                "idb_path": {"type": "string"},
-                            },
-                            "required": ["file_path"],
-                        },
-                    },
-                    {
-                        "name": "session_list",
-                        "description": "List all analysis sessions",
-                        "inputSchema": {"type": "object", "properties": {}},
-                    },
-                    {
-                        "name": "session_switch",
-                        "description": "Switch the active session",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "session_id": {"type": "string"},
-                            },
-                            "required": ["session_id"],
-                        },
-                    },
-                    {
-                        "name": "session_close",
-                        "description": "Close an analysis session",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "session_id": {"type": "string"},
-                            },
-                            "required": ["session_id"],
-                        },
-                    },
-                    {
-                        "name": "session_active",
-                        "description": "Get the active session",
-                        "inputSchema": {"type": "object", "properties": {}},
-                    },
-                    {
-                        "name": "session_status",
-                        "description": "Get session manager status",
-                        "inputSchema": {"type": "object", "properties": {}},
-                    },
-                ]
-                result["result"]["tools"] = session_tools + result["result"]["tools"]
-
-            return result.get("result", {"tools": []})
-        except httpx.HTTPError as e:
-            logger.error(f"Failed to get tools list from session: {e}")
-            # Return predefined tools when session is unavailable
-            return self._get_predefined_tools()
-
-    def _get_predefined_tools(self) -> dict:
-        """Return predefined IDA analysis tools"""
+        # Session management tools definition
         session_tools = [
             {
                 "name": "session_create",
@@ -328,113 +192,41 @@ class MultiSessionMCPServer:
             },
         ]
 
-        analysis_tools = [
-            {
-                "name": "lookup_funcs",
-                "description": "Look up functions by name/pattern",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "queries": {"type": "string"},
-                    },
-                    "required": ["queries"],
-                },
-            },
-            {
-                "name": "list_funcs",
-                "description": "List all functions in the binary",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "offset": {"type": "integer"},
-                        "count": {"type": "integer"},
-                    },
-                },
-            },
-            {
-                "name": "decompile",
-                "description": "Decompile a function at the given address",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "addrs": {"type": "string"},
-                    },
-                    "required": ["addrs"],
-                },
-            },
-            {
-                "name": "disasm",
-                "description": "Disassemble a function",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "addrs": {"type": "string"},
-                    },
-                },
-            },
-            {
-                "name": "xrefs_to",
-                "description": "Get cross-references to an address",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "addrs": {"type": "string"},
-                    },
-                },
-            },
-            {
-                "name": "callees",
-                "description": "Get functions called by a function",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "addrs": {"type": "string"},
-                    },
-                },
-            },
-            {
-                "name": "callers",
-                "description": "Get functions that call a function",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "addrs": {"type": "string"},
-                    },
-                },
-            },
-            {
-                "name": "strings",
-                "description": "Get strings from the binary",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "queries": {"type": "object"},
-                    },
-                },
-            },
-            {
-                "name": "search",
-                "description": "Search for patterns in the binary",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "queries": {"type": "object"},
-                    },
-                },
-            },
-            {
-                "name": "analyze_funcs",
-                "description": "Analyze functions comprehensively",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "addrs": {"type": "string"},
-                    },
-                },
-            },
-        ]
+        if not session:
+            # Return only session management tools when no session is active
+            logger.debug("No active session, returning only session management tools")
+            return {"tools": session_tools}
 
-        return {"tools": session_tools + analysis_tools}
+        # Forward to active session
+        session_url = f"http://127.0.0.1:{session.port}/mcp"
+
+        try:
+            response = await self.http_client.post(
+                session_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "method": "tools/list",
+                    "id": 1,
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Add session management tools to the result
+            if "result" in result and "tools" in result["result"]:
+                result["result"]["tools"] = session_tools + result["result"]["tools"]
+                logger.debug(f"Retrieved {len(result['result']['tools'])} tools from session {session.id}")
+                return result["result"]
+            else:
+                logger.warning(f"Invalid response from session {session.id}: {result}")
+                # Return session tools only when response is invalid
+                return {"tools": session_tools}
+
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to get tools list from session {session.id}: {e}")
+            logger.error(f"Session URL: {session_url}, Session status: {session.status}")
+            # Return only session management tools when session is unavailable
+            return {"tools": session_tools}
 
     async def proxy_tools_call(
         self,
@@ -454,14 +246,14 @@ class MultiSessionMCPServer:
 
         # Proxy to active/target session
         manager = get_session_manager()
-        session = await manager.get_session_for_call(session_id)
-
-        if not session:
+        try:
+            session = await manager.get_session_for_call(session_id)
+        except RuntimeError as e:
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": "No active session. Use session_create to create a session first.",
+                        "text": str(e),
                     }
                 ],
                 "isError": True,
@@ -470,6 +262,7 @@ class MultiSessionMCPServer:
         session_url = f"http://127.0.0.1:{session.port}/mcp"
 
         try:
+            logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
             response = await self.http_client.post(
                 session_url,
                 json={
@@ -482,6 +275,7 @@ class MultiSessionMCPServer:
                     "id": 1,
                 },
             )
+            logger.debug(f"Response status: {response.status_code}, body: {response.text[:500]}")
             response.raise_for_status()
             # Extract the actual result from the JSON-RPC response
             # Session server returns: {"result": {"content": [...], "structuredContent": {...}, "isError": false}}
@@ -492,11 +286,23 @@ class MultiSessionMCPServer:
             return json_response
         except httpx.HTTPError as e:
             logger.error(f"Failed to call tool {name} on session {session.id}: {e}")
+            logger.error(f"Session URL: {session_url}, Session status: {session.status.value}")
             return {
                 "content": [
                     {
                         "type": "text",
                         "text": f"Failed to reach session {session.id}: {e}",
+                    }
+                ],
+                "isError": True,
+            }
+        except Exception as e:
+            logger.exception(f"Unexpected error calling tool {name} on session {session.id}: {e}")
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Unexpected error: {e}",
                     }
                 ],
                 "isError": True,
