@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv*/
+venv*/
+
+# Logs
+*.log
+
+# IDA database
+*.idb
+*.i64
+*.nam
+*.id0
+*.id1
+*.id2
+*.til
+
+# Generated server files (historical)
+server_generated.py
+
+# Coverage
+htmlcov/
+.coverage*
+coverage.xml
