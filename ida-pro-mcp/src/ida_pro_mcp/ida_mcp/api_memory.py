@@ -34,14 +34,19 @@ def get_bytes(regions: list[MemoryRead] | MemoryRead) -> list[dict]:
     """Read raw bytes from memory addresses
 
     Args:
-        regions: List of memory read operations. Each operation must have:
+        regions: A single memory read operation OR a list of operations. Each operation is an object with:
             - addr: Address as hex string like "0x401000"
-            - size: Number of bytes to read
+            - size: Number of bytes to read (integer)
 
     Example:
-        get_bytes({"addr": "0x401000", "size": 16})  # Read 16 bytes from address
+        get_bytes({"addr": "0x401000", "size": 16})
         get_bytes([{"addr": "0x401000", "size": 16}, {"addr": "0x402000", "size": 32}])
     """
+    # Handle JSON string input (common issue with some MCP clients)
+    import json
+    if isinstance(regions, str):
+        regions = json.loads(regions)
+
     if isinstance(regions, dict):
         regions = [regions]
 
@@ -423,6 +428,11 @@ def patch(patches: list[MemoryPatch] | MemoryPatch) -> list[dict]:
         patch({"addr": "0x401000", "data": "90"})  # Write single NOP byte
         patch([{"addr": "0x401000", "data": "90 90"}, {"addr": "0x401004", "data": "B8 01 00 00 00"}])
     """
+    # Handle JSON string input (common issue with some MCP clients)
+    import json
+    if isinstance(patches, str):
+        patches = json.loads(patches)
+
     if isinstance(patches, dict):
         patches = [patches]
 

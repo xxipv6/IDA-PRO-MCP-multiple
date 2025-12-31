@@ -51,6 +51,11 @@ def set_comments(items: list[CommentOp] | CommentOp):
         # Or single item
         items = {"addr": "0x401000", "comment": "Entry point"}
     """
+    # Handle JSON string input (common issue with some MCP clients)
+    import json
+    if isinstance(items, str):
+        items = json.loads(items)
+
     if isinstance(items, dict):
         items = [items]
 
