@@ -30,7 +30,7 @@ from .tests import (
 
 @tool
 @idasync
-def get_bytes(regions: list[MemoryRead] | MemoryRead) -> list[dict]:
+def get_bytes(regions: list[MemoryRead] | MemoryRead | str) -> list[dict]:
     """Read raw bytes from memory addresses
 
     Args:
@@ -38,11 +38,13 @@ def get_bytes(regions: list[MemoryRead] | MemoryRead) -> list[dict]:
             - addr: Address as hex string like "0x401000"
             - size: Number of bytes to read (integer)
 
+            Can also be a JSON string that will be automatically parsed.
+
     Example:
         get_bytes({"addr": "0x401000", "size": 16})
         get_bytes([{"addr": "0x401000", "size": 16}, {"addr": "0x402000", "size": 32}])
     """
-    # Handle JSON string input (common issue with some MCP clients)
+    # Handle JSON string input (some MCP clients send strings instead of objects)
     import json
     if isinstance(regions, str):
         regions = json.loads(regions)
@@ -416,7 +418,7 @@ def test_get_global_value():
 
 @tool
 @idasync
-def patch(patches: list[MemoryPatch] | MemoryPatch) -> list[dict]:
+def patch(patches: list[MemoryPatch] | MemoryPatch | str) -> list[dict]:
     """Patch bytes at memory addresses with hexadecimal data
 
     Args:
@@ -424,11 +426,13 @@ def patch(patches: list[MemoryPatch] | MemoryPatch) -> list[dict]:
             - addr: Address as hex string like "0x401000"
             - data: Hex bytes to write (e.g. "90" for NOP, "90 90" for two NOPs)
 
+            Can also be a JSON string that will be automatically parsed.
+
     Example:
         patch({"addr": "0x401000", "data": "90"})  # Write single NOP byte
         patch([{"addr": "0x401000", "data": "90 90"}, {"addr": "0x401004", "data": "B8 01 00 00 00"}])
     """
-    # Handle JSON string input (common issue with some MCP clients)
+    # Handle JSON string input (some MCP clients send strings instead of objects)
     import json
     if isinstance(patches, str):
         patches = json.loads(patches)

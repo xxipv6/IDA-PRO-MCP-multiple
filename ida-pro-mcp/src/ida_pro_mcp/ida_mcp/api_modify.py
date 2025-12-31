@@ -35,13 +35,15 @@ from .tests import (
 
 @tool
 @idasync
-def set_comments(items: list[CommentOp] | CommentOp):
+def set_comments(items: list[CommentOp] | CommentOp | str):
     """Set comments at addresses (both disassembly and decompiler views)
 
     Args:
         items: List of comment operations. Each operation must have:
             - addr: Address (hex string like "0x401000" or decimal)
             - comment: Comment text to set
+
+            Can also be a JSON string that will be automatically parsed.
 
     Example:
         items = [
@@ -164,13 +166,15 @@ def test_set_comment_roundtrip():
 
 @tool
 @idasync
-def patch_asm(items: list[AsmPatchOp] | AsmPatchOp) -> list[dict]:
+def patch_asm(items: list[AsmPatchOp] | AsmPatchOp | str) -> list[dict]:
     """Patch assembly instructions at addresses
 
     Args:
         items: List of assembly patch operations. Each operation must have:
             - addr: Address (hex string like "0x401000" or decimal)
             - asm: Assembly instruction(s), semicolon-separated for multiple
+
+            Can also be a JSON string that will be automatically parsed.
 
     Example:
         items = [
@@ -180,6 +184,11 @@ def patch_asm(items: list[AsmPatchOp] | AsmPatchOp) -> list[dict]:
         # Or single item
         items = {"addr": "0x401000", "asm": "nop"}
     """
+    # Handle JSON string input (some MCP clients send strings instead of objects)
+    import json
+    if isinstance(items, str):
+        items = json.loads(items)
+
     if isinstance(items, dict):
         items = [items]
 
@@ -246,7 +255,7 @@ def test_patch_asm():
 
 @tool
 @idasync
-def rename(batch: RenameBatch) -> dict:
+def rename(batch: RenameBatch | str) -> dict:
     """Unified rename operation for functions, globals, locals, and stack variables
 
     Args:
@@ -256,6 +265,8 @@ def rename(batch: RenameBatch) -> dict:
             - local: List of local variable renames: [{"func_addr": "0x401000", "old": "var", "new": "new_var"}]
             - stack: List of stack variable renames: [{"func_addr": "0x401000", "old": "var", "new": "new_var"}]
 
+            Can also be a JSON string that will be automatically parsed.
+
     Example:
         batch = {
             "func": [{"addr": "0x401000", "name": "main"}],
@@ -264,6 +275,10 @@ def rename(batch: RenameBatch) -> dict:
             "stack": [{"func_addr": "0x401000", "old": "var_0", "new": "buffer"}]
         }
     """
+    # Handle JSON string input (some MCP clients send strings instead of objects)
+    import json
+    if isinstance(batch, str):
+        batch = json.loads(batch)
 
     def _normalize_items(items):
         """Convert single item or None to list"""
