@@ -134,6 +134,19 @@ def run_idalib_session(
             sys.path.insert(0, str(pkg_root))
 
         logger.info(f"Package root: {pkg_root}")
+        logger.info(f"Importing ida_pro_mcp.ida_mcp package (registers all tools)")
+
+        # IMPORTANT: Import the package first to trigger __init__.py which imports
+        # all api_* modules and registers their @tool decorators
+        try:
+            import ida_pro_mcp.ida_mcp
+            logger.info(f"Successfully imported ida_pro_mcp.ida_mcp package")
+        except Exception as e:
+            logger.error(f"Failed to import ida_pro_mcp.ida_mcp: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
         logger.info(f"Importing MCP server from ida_pro_mcp.ida_mcp.rpc")
 
         # Now we can import normally - inside IDALib, idaapi is available
@@ -141,6 +154,12 @@ def run_idalib_session(
         from ida_pro_mcp.ida_mcp.rpc import set_download_base_url, MCP_SERVER
 
         set_download_base_url(f"http://127.0.0.1:{port}")
+
+        # Log how many tools are registered
+        num_tools = len(MCP_SERVER.tools.methods)
+        logger.info(f"Registered {num_tools} MCP tools")
+        for tool_name in sorted(MCP_SERVER.tools.methods.keys()):
+            logger.debug(f"  - {tool_name}")
 
         logger.info(f"MCP server starting on port {port}")
 

@@ -136,10 +136,11 @@ class Session:
                 cmd.append("--no-auto-analysis")
 
             # Start the subprocess
+            # Note: We don't capture stdout/stderr so logs go to console
             self._process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=None,  # Inherit stdout from parent
+                stderr=None,  # Inherit stderr from parent
                 text=True,
             )
 
@@ -152,15 +153,10 @@ class Session:
                     self._ready_event_path.unlink()
                     break
                 if self._process.poll() is not None:
-                    # Process has terminated - capture output for debugging
-                    stdout, stderr = self._process.communicate(timeout=5)
-                    if stderr:
-                        logger.error(f"Session {self.id} stderr:\n{stderr}")
-                    if stdout:
-                        logger.info(f"Session {self.id} stdout:\n{stdout}")
+                    # Process has terminated
                     self.status = SessionStatus.ERROR
                     self.error_message = "IDA process terminated unexpectedly"
-                    logger.error(f"Session {self.id} process terminated")
+                    logger.error(f"Session {self.id} process terminated unexpectedly")
                     raise RuntimeError(f"Session {self.id} process terminated unexpectedly")
                 time.sleep(0.1)
             else:
@@ -178,12 +174,6 @@ class Session:
 
             # Double-check process is still running
             if self._process.poll() is not None:
-                # Capture and log stderr/stdout for debugging
-                stdout, stderr = self._process.communicate(timeout=5)
-                if stderr:
-                    logger.error(f"Session {self.id} stderr:\n{stderr}")
-                if stdout:
-                    logger.info(f"Session {self.id} stdout:\n{stdout}")
                 self.status = SessionStatus.ERROR
                 self.error_message = "IDA process terminated unexpectedly after ready"
                 raise RuntimeError(f"Session {self.id} process terminated after ready")
