@@ -1,6 +1,6 @@
 # IDA MCP Server 使用说明
 
-支持多文件、多会话并行分析
+支持多文件、多会话并行分析，切记切记切记！mcp连接之后获取到的工具数量是77个！
 
 ![image-20251229204640370](https://xipv6.oss-cn-hangzhou.aliyuncs.com/img/image-20251229204640370.png)
 
