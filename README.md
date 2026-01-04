@@ -21,7 +21,7 @@
 | 组件 | Windows | macOS | Linux |
 |------|---------|-------|-------|
 | Python | 3.11+ | 3.11+ | 3.11+ |
-| IDA Pro | 9.2+ (7.7+ 可用) | 9.2+ | 9.2+ |
+| IDA Pro | 9.2+ | 9.2+ | 9.2+ |
 | uv | `pip install uv` 或 `pipx install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` 或 `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 
 ### 2. 安装步骤
