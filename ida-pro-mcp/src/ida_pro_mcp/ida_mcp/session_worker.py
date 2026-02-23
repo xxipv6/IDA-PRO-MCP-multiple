@@ -40,8 +40,9 @@ def _signal_handler(signum, frame):
 def run_idalib_session(
     file_path: str,
     port: int,
-    idb_path: str | None,
-    auto_analysis: bool,
+    host: str = "127.0.0.1",
+    idb_path: str | None = None,
+    auto_analysis: bool = True,
     ready_file: Path | None = None,
 ) -> None:
     """Run an IDALib session in a separate process
@@ -52,6 +53,7 @@ def run_idalib_session(
     Args:
         file_path: Path to the binary file to analyze
         port: Port number for the MCP server
+        host: Host to bind the MCP server to
         idb_path: Optional path for the IDB file
         auto_analysis: Whether to run auto analysis
         ready_file: Optional path to a file to create when ready
@@ -153,7 +155,7 @@ def run_idalib_session(
         # so the ida_mcp package imports will work
         from ida_pro_mcp.ida_mcp.rpc import set_download_base_url, MCP_SERVER
 
-        set_download_base_url(f"http://127.0.0.1:{port}")
+        set_download_base_url(f"http://{host}:{port}")
 
         # Log how many tools are registered
         num_tools = len(MCP_SERVER.tools.methods)
@@ -170,7 +172,7 @@ def run_idalib_session(
         # Start the MCP server in blocking mode (runs on main thread)
         # This ensures IDA API calls work correctly without threading issues
         try:
-            MCP_SERVER.serve(host="127.0.0.1", port=port, background=False)
+            MCP_SERVER.serve(host=host, port=port, background=False)
         finally:
             # Clean shutdown when serve() returns
             logger.info("MCP server stopped, closing IDA database...")
@@ -189,6 +191,7 @@ def run_idalib_session_main() -> None:
 
     parser = argparse.ArgumentParser(description="IDA Pro MCP Session Worker")
     parser.add_argument("file_path", type=str, help="Path to binary file")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host for MCP server")
     parser.add_argument("--port", type=int, required=True, help="Port for MCP server")
     parser.add_argument("--idb-path", type=str, default=None, help="Path for IDB file")
     parser.add_argument(
@@ -206,6 +209,7 @@ def run_idalib_session_main() -> None:
     ready_file = Path(args.ready_file) if args.ready_file else None
     run_idalib_session(
         file_path=args.file_path,
+        host=args.host,
         port=args.port,
         idb_path=args.idb_path,
         auto_analysis=not args.no_auto_analysis,

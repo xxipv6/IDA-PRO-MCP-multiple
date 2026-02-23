@@ -66,6 +66,7 @@ class MultiSessionMCPServer:
             max_sessions=max_sessions,
             session_timeout=session_timeout,
             idb_cache_dir=idb_cache_dir,
+            host=host,
         )
 
         # Create MCP server

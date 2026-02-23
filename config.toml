@@ -4,6 +4,9 @@
 # Main MCP HTTP port
 port = 8745
 
+# Host to bind (default: 127.0.0.1, use 0.0.0.0 for all interfaces)
+host = "0.0.0.0"
+
 # Base port for session workers
 base_session_port = 10000
 
@@ -12,7 +15,7 @@ analyze_dir = "analyze"
 
 # IDA installation path (optional). Leave empty to use environment.
 # Use forward slashes to avoid escape issues on Windows
-ida_dir = "E:/Tools/BinAny/IDA9.2"
+ida_dir = "/Applications/IDA.app/Contents/MacOS"
 
 # uv executable to use
 uv = "uv"

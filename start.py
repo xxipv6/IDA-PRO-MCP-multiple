@@ -19,13 +19,31 @@ from typing import Any, Dict, List
 
 
 def is_supported_binary(path: Path) -> bool:
-    """Return True if file looks like PE or ELF based on magic bytes."""
+    """Return True if file looks like PE, ELF, or Mach-O based on magic bytes."""
     try:
         with path.open("rb") as f:
             signature = f.read(4)
     except OSError:
         return False
-    return signature.startswith(b"MZ") or signature.startswith(b"\x7fELF")
+
+    # PE: MZ
+    if signature.startswith(b"MZ"):
+        return True
+    # ELF: \x7fELF
+    if signature.startswith(b"\x7fELF"):
+        return True
+    # Mach-O magic numbers (big and little endian for 32/64-bit and universal)
+    mach_o_magics = {
+        b"\xFE\xED\xFA\xCE",  # MH_MAGIC (32-bit, big endian)
+        b"\xCE\xFA\xED\xFE",  # MH_MAGIC (32-bit, little endian)
+        b"\xFE\xED\xFA\xCF",  # MH_MAGIC_64 (64-bit, big endian)
+        b"\xCF\xFA\xED\xFE",  # MH_MAGIC_64 (64-bit, little endian)
+        b"\xCA\xFE\xBA\xBE",  # FAT_MAGIC (universal binary, big endian)
+        b"\xBE\xBA\xFE\xCA",  # FAT_MAGIC (universal binary, little endian)
+        b"\xCA\xFE\xBA\xBF",  # FAT_MAGIC_64 (universal binary 64-bit, big endian)
+        b"\xBF\xBA\xFE\xCA",  # FAT_MAGIC_64 (universal binary 64-bit, little endian)
+    }
+    return signature in mach_o_magics
 
 
 def collect_binaries(analyze_dir: Path) -> List[str]:
@@ -36,12 +54,55 @@ def collect_binaries(analyze_dir: Path) -> List[str]:
     return files
 
 
-def port_available(port: int) -> bool:
-    """Check if a TCP port is free on localhost."""
+def kill_port_process(port: int) -> bool:
+    """Kill processes listening on the specified port. Returns True if any process was killed."""
+    if sys.platform == "win32":
+        # Windows: use netstat and taskkill
+        try:
+            result = subprocess.run(
+                f'netstat -ano | findstr ":{port}"',
+                shell=True,
+                capture_output=True,
+                text=True,
+            )
+            pids = set()
+            for line in result.stdout.strip().split("\n"):
+                if line and "LISTENING" in line:
+                    parts = line.split()
+                    if parts:
+                        pids.add(parts[-1])
+            for pid in pids:
+                if pid.isdigit():
+                    subprocess.run(f'taskkill /F /PID {pid}', shell=True, capture_output=True)
+                    print(f"[INFO] Killed process {pid} on port {port}")
+            return len(pids) > 0
+        except Exception:
+            return False
+    else:
+        # macOS/Linux: use lsof
+        try:
+            result = subprocess.run(
+                f"lsof -i :{port} -t",
+                shell=True,
+                capture_output=True,
+                text=True,
+            )
+            pids = result.stdout.strip().split("\n")
+            pids = [p for p in pids if p.isdigit()]
+            for pid in pids:
+                subprocess.run(f"kill -9 {pid}", shell=True, capture_output=True)
+                print(f"[INFO] Killed process {pid} on port {port}")
+            return len(pids) > 0
+        except Exception:
+            return False
+
+
+def port_available(host: str, port: int) -> bool:
+    """Check if a TCP port is free on the specified host."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            sock.bind(("127.0.0.1", port))
+            sock.bind((host, port))
         except OSError:
             return False
     return True
@@ -49,6 +110,7 @@ def port_available(port: int) -> bool:
 
 DEFAULTS: Dict[str, Any] = {
     "port": 8746,
+    "host": "127.0.0.1",
     "base_session_port": 10000,
     "analyze_dir": str(Path(__file__).parent / "analyze"),
     "ida_dir": None,
@@ -86,6 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Start IDA MCP multi-session server (cross-platform)")
     parser.add_argument("--config", type=Path, default=Path(__file__).parent / "config.toml", help="Path to config.toml")
     parser.add_argument("--port", type=int, default=None, help="Main MCP HTTP port")
+    parser.add_argument("--host", default=None, help="Host to bind (default: 127.0.0.1)")
     parser.add_argument("--base-session-port", type=int, default=None, help="Base port for session workers")
     parser.add_argument("--analyze-dir", type=Path, default=None, help="Directory containing binaries to preload")
     parser.add_argument("--ida-dir", type=Path, default=None, help="Optional IDA installation path (sets IDADIR env)")
@@ -116,6 +179,7 @@ def main() -> int:
         return 1
 
     analyze_dir = resolve_path(pick(args.analyze_dir, cfg.get("analyze_dir"), DEFAULTS["analyze_dir"]), base_dir)
+    host = pick(args.host, cfg.get("host"), DEFAULTS["host"])
     port = int(pick(args.port, cfg.get("port"), DEFAULTS["port"]))
     base_session_port = int(pick(args.base_session_port, cfg.get("base_session_port"), DEFAULTS["base_session_port"]))
     ida_dir = resolve_path(pick(args.ida_dir, cfg.get("ida_dir"), DEFAULTS["ida_dir"]), base_dir)
@@ -132,8 +196,14 @@ def main() -> int:
             print(f"[ERROR] No PE/ELF binaries found in {analyze_dir}. Use --no-preload to start empty.")
             return 1
 
-    if not skip_port_check and not port_available(port):
-        print(f"[ERROR] Port {port} looks busy. Free it or rerun with --skip-port-check if intentional.")
+    # Kill any existing processes on the main port and session ports
+    kill_port_process(port)
+    # Also kill processes on session ports (base_session_port to base_session_port + 10)
+    for session_port in range(base_session_port, base_session_port + 10):
+        kill_port_process(session_port)
+
+    if not skip_port_check and not port_available(host, port):
+        print(f"[ERROR] {host}:{port} looks busy. Free it or rerun with --skip-port-check if intentional.")
         return 1
 
     env = os.environ.copy()
@@ -144,6 +214,8 @@ def main() -> int:
         uv_path,
         "run",
         "idalib-mcp-multisession",
+        "--host",
+        host,
         "--port",
         str(port),
         "--base-session-port",
@@ -155,6 +227,7 @@ def main() -> int:
     print("=== IDA MCP Multi-Session Server ===")
     print(f"uv: {uv_path}")
     print(f"MCP dir: {mcp_dir}")
+    print(f"Host: {host}")
     print(f"Port: {port}")
     print(f"Base session port: {base_session_port}")
     if ida_dir:

@@ -70,12 +70,14 @@ class Session:
         session_id: str,
         file_path: str,
         port: int,
+        host: str = "127.0.0.1",
         idb_path: Optional[str] = None,
         auto_analysis: bool = True,
     ):
         self.id = session_id
         self.file_path = str(file_path)
         self.port = port
+        self.host = host
         self.idb_path = idb_path
         self.auto_analysis = auto_analysis
         self.status = SessionStatus.CREATING
@@ -127,6 +129,7 @@ class Session:
                 sys.executable,
                 str(worker_script),
                 self.file_path,
+                "--host", self.host,
                 "--port", str(self.port),
                 "--ready-file", str(self._ready_event_path),
             ]
@@ -235,11 +238,13 @@ class SessionManager:
         max_sessions: int = 5,
         session_timeout: float = 3600,
         idb_cache_dir: Optional[str] = None,
+        host: str = "127.0.0.1",
     ):
         self.base_port = base_port
         self.max_sessions = max_sessions
         self.session_timeout = session_timeout
         self.idb_cache_dir = Path(idb_cache_dir) if idb_cache_dir else None
+        self.host = host
 
         self._sessions: Dict[str, Session] = {}
         self._port_allocator: set = set()
@@ -366,6 +371,7 @@ class SessionManager:
                 session_id=session_id,
                 file_path=str(file_path_obj),
                 port=port,
+                host=self.host,
                 idb_path=idb_path,
                 auto_analysis=auto_analysis,
             )
@@ -535,6 +541,7 @@ def init_session_manager(
     max_sessions: int = 5,
     session_timeout: float = 3600,
     idb_cache_dir: Optional[str] = None,
+    host: str = "127.0.0.1",
 ) -> SessionManager:
     """Initialize the global session manager"""
     global _session_manager
@@ -545,5 +552,6 @@ def init_session_manager(
         max_sessions=max_sessions,
         session_timeout=session_timeout,
         idb_cache_dir=idb_cache_dir,
+        host=host,
     )
     return _session_manager
