@@ -149,7 +149,7 @@ class Session:
 
             # Wait for the process to signal ready (with timeout)
             start_time = time.time()
-            timeout = 300  # 5 minutes
+            timeout = 3600  # 1 hour
             while time.time() - start_time < timeout:
                 if self._ready_event_path.exists():
                     # Ready file exists, session is ready
