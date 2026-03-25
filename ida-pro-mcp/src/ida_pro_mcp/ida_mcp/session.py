@@ -296,15 +296,8 @@ class SessionManager:
                     self._close_session_unlocked(session_id)
                     continue
 
-                # Check idle timeout
-                if session.status == SessionStatus.READY:
-                    idle_time = session.get_idle_time()
-                    if idle_time > self.session_timeout:
-                        logger.info(
-                            f"Closing idle session {session_id} "
-                            f"(idle for {idle_time:.0f}s)"
-                        )
-                        self._close_session_unlocked(session_id)
+                # Auto-expire is disabled - sessions never expire due to idle time
+                # They will only be closed when explicitly requested or on process termination
 
     def _close_session_unlocked(self, session_id: str) -> None:
         """Close a session (caller must hold lock)"""
