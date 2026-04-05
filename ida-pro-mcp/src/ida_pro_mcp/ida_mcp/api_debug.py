@@ -167,6 +167,10 @@ def dbg_start():
         if not debugger_name or not idaapi.load_debugger(debugger_name, 0):
             raise IDAError(f"Failed to load debugger: {debugger_name or 'default'}")
 
+    if ida_dbg.get_process_state() != ida_dbg.DSTATE_NOTASK:
+        ida_dbg.clear_requests_queue()
+        ida_dbg.invalidate_dbg_state(ida_dbg.get_process_state())
+
     if len(list_breakpoints()) == 0:
         for i in range(ida_entry.get_entry_qty()):
             ordinal = ida_entry.get_entry_ordinal(i)
@@ -175,18 +179,20 @@ def dbg_start():
                 ida_dbg.add_bpt(addr, 0, idaapi.BPT_SOFT)
 
     process_path, process_args, process_dir, _, _, _ = ida_dbg.get_process_options()
-    if idaapi.start_process(
+    start_rc = idaapi.start_process(
         process_path or "",
         process_args or "",
         process_dir or "",
-    ) == 1:
+    )
+    if start_rc == 1:
         ip = ida_dbg.get_ip_val()
         if ip is not None:
             return hex(ip)
 
     process_path, _, process_dir, _, _, _ = ida_dbg.get_process_options()
     raise IDAError(
-        f"Failed to start debugger for {process_path or '<unknown>'} in {process_dir or '<unknown>'}"
+        f"Failed to start debugger for {process_path or '<unknown>'} in {process_dir or '<unknown>'} "
+        f"(start_rc={start_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
     )
 
 
