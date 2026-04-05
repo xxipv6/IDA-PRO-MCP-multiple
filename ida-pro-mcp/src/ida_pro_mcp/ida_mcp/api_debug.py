@@ -81,6 +81,15 @@ def _wait_for_suspend(timeout_ms: int = 5000) -> tuple[int, int | None]:
     return wait_rc, ida_dbg.get_ip_val()
 
 
+def _wait_for_suspend_outside_sync(timeout_ms: int = 5000) -> tuple[int, int | None]:
+    old_batch = idaapi.cvar.batch
+    idaapi.cvar.batch = False
+    try:
+        return _wait_for_suspend(timeout_ms)
+    finally:
+        idaapi.cvar.batch = old_batch
+
+
 def _ensure_suspended_state(timeout_ms: int = 5000) -> tuple[int | None, int | None]:
     state = ida_dbg.get_process_state()
     if state == ida_dbg.DSTATE_SUSP:
@@ -219,8 +228,7 @@ def dbg_start():
     )
     wait_rc = None
     if start_rc == 1:
-        wait_rc = ida_dbg.wait_for_next_event(ida_dbg.WFNE_SUSP, 5000)
-        ip = ida_dbg.get_ip_val()
+        wait_rc, ip = _wait_for_suspend_outside_sync(5000)
         if ip is not None:
             return hex(ip)
 
@@ -238,7 +246,7 @@ def dbg_exit():
     """Exit debugger"""
     dbg_ensure_running()
     if idaapi.exit_process():
-        wait_rc = ida_dbg.wait_for_next_event(ida_dbg.WFNE_SUSP, 5000)
+        wait_rc, _ = _wait_for_suspend_outside_sync(5000)
         if ida_dbg.get_ip_val() is None or ida_dbg.get_process_state() == ida_dbg.DSTATE_NOTASK:
             return
         raise IDAError(
