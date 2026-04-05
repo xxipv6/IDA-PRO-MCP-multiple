@@ -36,8 +36,8 @@ _session_module = _load_session_module()
 init_session_manager = _session_module.init_session_manager
 get_session_manager = _session_module.get_session_manager
 
-# Import zeromcp (no IDA dependencies)
-from zeromcp import McpServer, McpRpcRegistry, McpHttpRequestHandler, McpToolError
+# Import vendored zeromcp implementation
+from .ida_mcp.zeromcp import McpServer, McpRpcRegistry, McpHttpRequestHandler, McpToolError
 
 logger = logging.getLogger(__name__)
 
