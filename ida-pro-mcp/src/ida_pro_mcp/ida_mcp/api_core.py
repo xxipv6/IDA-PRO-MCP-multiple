@@ -306,10 +306,13 @@ def int_convert(
         try:
             value = int(text, 0)
         except ValueError:
-            results.append(
-                {"input": text, "result": None, "error": f"Invalid number: {text}"}
-            )
-            continue
+            try:
+                value = int(text, 16)
+            except ValueError:
+                results.append(
+                    {"input": text, "result": None, "error": f"Invalid number: {text}"}
+                )
+                continue
 
         if not size:
             size = 0
@@ -369,6 +372,17 @@ def test_int_convert():
     assert conv["decimal"] == "65"
     assert conv["hexadecimal"] == "0x41"
     assert conv["ascii"] == "A"
+
+
+@test()
+def test_int_convert_plain_hex_text():
+    """int_convert accepts plain hex text without a 0x prefix"""
+    result = int_convert({"text": "A"})
+    assert_is_list(result, min_length=1)
+    assert result[0]["error"] is None
+    assert result[0]["result"] is not None
+    assert result[0]["result"]["decimal"] == "10"
+    assert result[0]["result"]["hexadecimal"] == "0xa"
 
 
 @test()
