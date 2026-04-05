@@ -19,7 +19,7 @@ import ida_typeinf
 import ida_xref
 
 from .rpc import tool, unsafe
-from .sync import idasync
+from .sync import idasync, IDAError
 from .utils import parse_address, get_function
 
 # ============================================================================
@@ -117,6 +117,8 @@ def py_eval(
         try:
             result_value = str(eval(code, exec_globals))
         except Exception:
+            if "run_tests(" in code:
+                raise IDAError("run_tests() cannot be executed through py_eval; call it from the session worker directly")
             # Execute as statements
             exec_locals = {}
             exec(code, exec_globals, exec_locals)
