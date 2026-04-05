@@ -68,9 +68,6 @@ class MultiSessionMCPServer:
         # Create MCP server
         self.mcp_server = McpServer("ida-pro-mcp-multisession", version="2.0.0")
 
-        # HTTP client for making requests to session servers
-        self.http_client = httpx.AsyncClient(timeout=30.0)
-
         # Register session management tools
         self._register_session_tools()
 
@@ -158,14 +155,15 @@ class MultiSessionMCPServer:
         session_url = f"http://127.0.0.1:{session.port}/mcp"
 
         try:
-            response = await self.http_client.post(
-                session_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tools/list",
-                    "id": 1,
-                },
-            )
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                response = await http_client.post(
+                    session_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "tools/list",
+                        "id": 1,
+                    },
+                )
             response.raise_for_status()
             result = response.json()
 
@@ -220,18 +218,19 @@ class MultiSessionMCPServer:
 
         try:
             logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
-            response = await self.http_client.post(
-                session_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tools/call",
-                    "params": {
-                        "name": name,
-                        "arguments": arguments,
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                response = await http_client.post(
+                    session_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "tools/call",
+                        "params": {
+                            "name": name,
+                            "arguments": arguments,
+                        },
+                        "id": 1,
                     },
-                    "id": 1,
-                },
-            )
+                )
             logger.debug(f"Response status: {response.status_code}, body: {response.text[:500]}")
             response.raise_for_status()
             # Extract the actual result from the JSON-RPC response
@@ -340,7 +339,6 @@ class MultiSessionMCPServer:
     async def shutdown(self) -> None:
         """Shutdown the server and close all sessions"""
         logger.info("Shutting down multi-session MCP server")
-        await self.http_client.aclose()
         self.session_manager.shutdown()
 
 
