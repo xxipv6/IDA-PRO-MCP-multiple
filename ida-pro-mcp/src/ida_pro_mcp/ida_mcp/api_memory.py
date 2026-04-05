@@ -8,6 +8,7 @@ from typing import Annotated
 import ida_bytes
 import ida_nalt
 import ida_typeinf
+import ida_name
 import idaapi
 
 from .rpc import tool
@@ -328,29 +329,33 @@ def test_get_string():
 
 def get_global_variable_value_internal(ea: int) -> str:
     tif = ida_typeinf.tinfo_t()
-    if not ida_nalt.get_tinfo(tif, ea):
-        if not ida_bytes.has_any_name(ea):
-            raise IDAError(f"Failed to get type information for variable at {ea:#x}")
+    has_type = ida_nalt.get_tinfo(tif, ea)
 
+    if has_type and tif.is_array() and tif.get_array_element().is_decl_char():
+        strlit = idaapi.get_strlit_contents(ea, -1, 0)
+        if strlit is not None:
+            return f'"{strlit.decode("utf-8", errors="replace").strip()}"'
+
+    if has_type:
+        size = tif.get_size()
+    else:
         size = ida_bytes.get_item_size(ea)
         if size == 0:
             raise IDAError(f"Failed to get type information for variable at {ea:#x}")
-    else:
-        size = tif.get_size()
 
-    if size == 0 and tif.is_array() and tif.get_array_element().is_decl_char():
-        return_string = idaapi.get_strlit_contents(ea, -1, 0).decode("utf-8").strip()
-        return f'"{return_string}"'
-    elif size == 1:
+    if size == 1:
         return hex(ida_bytes.get_byte(ea))
-    elif size == 2:
+    if size == 2:
         return hex(ida_bytes.get_word(ea))
-    elif size == 4:
+    if size == 4:
         return hex(ida_bytes.get_dword(ea))
-    elif size == 8:
+    if size == 8:
         return hex(ida_bytes.get_qword(ea))
-    else:
-        return " ".join(hex(x) for x in ida_bytes.get_bytes(ea, size))
+
+    data = ida_bytes.get_bytes(ea, size)
+    if data is None:
+        raise IDAError(f"Failed to read {size} bytes at {ea:#x}")
+    return " ".join(hex(x) for x in data)
 
 
 @tool
@@ -380,7 +385,7 @@ def get_global_value(
 
             # Fall back to name lookup
             if ea == idaapi.BADADDR:
-                ea = idaapi.get_name_ea(idaapi.BADADDR, query)
+                ea = ida_name.get_name_ea(idaapi.BADADDR, query)
 
             if ea == idaapi.BADADDR:
                 results.append({"query": query, "value": None, "error": "Not found"})
