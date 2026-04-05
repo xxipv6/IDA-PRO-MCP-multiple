@@ -254,7 +254,10 @@ def test_lookup_funcs_data_address():
 @idasync
 def cursor_addr() -> str:
     """Get current address"""
-    return hex(idaapi.get_screen_ea())
+    ea = idaapi.get_screen_ea()
+    if ea == idaapi.BADADDR:
+        raise IDAError("No current address")
+    return hex(ea)
 
 
 @test()
@@ -272,7 +275,10 @@ def test_cursor_addr():
 @idasync
 def cursor_func() -> Optional[Function]:
     """Get current function"""
-    return get_function(idaapi.get_screen_ea())
+    ea = idaapi.get_screen_ea()
+    if ea == idaapi.BADADDR:
+        raise IDAError("No current address")
+    return get_function(ea)
 
 
 @test()
@@ -286,6 +292,27 @@ def test_cursor_func():
             assert_valid_address(result["addr"])
     except IDAError:
         pass  # Expected in headless mode or if cursor not in function
+
+
+@test()
+def test_cursor_tools_badaddr():
+    """cursor tools reject BADADDR instead of returning sentinel values"""
+    original_get_screen_ea = idaapi.get_screen_ea
+    try:
+        idaapi.get_screen_ea = lambda: idaapi.BADADDR
+        try:
+            cursor_addr()
+            assert False, "cursor_addr should fail on BADADDR"
+        except IDAError as e:
+            assert "No current address" in str(e)
+
+        try:
+            cursor_func()
+            assert False, "cursor_func should fail on BADADDR"
+        except IDAError as e:
+            assert "No current address" in str(e)
+    finally:
+        idaapi.get_screen_ea = original_get_screen_ea
 
 
 @tool
