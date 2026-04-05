@@ -162,6 +162,11 @@ def list_breakpoints():
 @unsafe
 def dbg_start():
     """Start debugger"""
+    if ida_idd.get_dbg() is None:
+        debugger_name = "win32" if os.name == "nt" else ""
+        if not debugger_name or not idaapi.load_debugger(debugger_name, 0):
+            raise IDAError(f"Failed to load debugger: {debugger_name or 'default'}")
+
     if len(list_breakpoints()) == 0:
         for i in range(ida_entry.get_entry_qty()):
             ordinal = ida_entry.get_entry_ordinal(i)
@@ -173,7 +178,11 @@ def dbg_start():
         ip = ida_dbg.get_ip_val()
         if ip is not None:
             return hex(ip)
-    raise IDAError("Failed to start debugger")
+
+    process_path, _, process_dir, _, _, _ = ida_dbg.get_process_options()
+    raise IDAError(
+        f"Failed to start debugger for {process_path or '<unknown>'} in {process_dir or '<unknown>'}"
+    )
 
 
 @tool
