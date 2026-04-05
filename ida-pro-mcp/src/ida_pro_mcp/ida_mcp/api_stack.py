@@ -208,7 +208,8 @@ def delete_stack(
             frame_tif.get_udm_by_tid(udm, tid)
             offset = udm.offset // 8
             size = udm.size // 8
-            if ida_frame.is_funcarg_off(func, offset):
+            member_name = udm.name or var_name
+            if member_name.startswith("arg_") and ida_frame.is_funcarg_off(func, offset):
                 results.append(
                     {
                         "addr": fn_addr,
