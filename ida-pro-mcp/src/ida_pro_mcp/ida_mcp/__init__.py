@@ -9,7 +9,7 @@ Architecture:
 - sync.py: IDA synchronization decorators (@idasync)
 - utils.py: Shared helpers and TypedDict definitions
 - tests.py: Test framework (@test decorator, run_tests)
-- api_*.py: Modular API implementations (71 tools + 24 resources)
+- api_*.py: Modular API implementations (77 tools + 24 resources)
 """
 
 # Import infrastructure modules
@@ -28,6 +28,8 @@ from . import api_stack
 from . import api_debug
 from . import api_python
 from . import api_resources
+from . import api_diec
+from . import api_unpack
 
 # Re-export key components for external use
 from .sync import idasync, IDAError, IDASyncError
@@ -51,6 +53,8 @@ __all__ = [
     "api_debug",
     "api_python",
     "api_resources",
+    "api_diec",
+    "api_unpack",
     # Re-exported components
     "idasync",
     "IDAError",
