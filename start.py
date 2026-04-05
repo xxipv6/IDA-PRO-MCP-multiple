@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-platform launcher for the IDA MCP multi-session server.
 
-- Scans the local analyze/ directory for PE or ELF binaries.
+- Scans the local analyze/ directory for PE, ELF, or Mach-O binaries.
 - Starts idalib-mcp-multisession via uv with the detected files preloaded.
 - Works on Windows, macOS, and Linux.
 """
@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 def is_supported_binary(path: Path) -> bool:
@@ -109,9 +109,11 @@ def port_available(host: str, port: int) -> bool:
 
 
 DEFAULTS: Dict[str, Any] = {
-    "port": 8746,
+    "port": 8745,
     "host": "127.0.0.1",
     "base_session_port": 10000,
+    "max_sessions": 10,
+    "file_load_timeout": 3600,
     "analyze_dir": str(Path(__file__).parent / "analyze"),
     "ida_dir": None,
     "uv": "uv",
@@ -131,10 +133,6 @@ def load_config(config_path: Path) -> Dict[str, Any]:
     return config
 
 
-def pick(value_cli: Any, value_cfg: Any, default: Any) -> Any:
-    return value_cli if value_cli is not None else (value_cfg if value_cfg is not None else default)
-
-
 def resolve_path(value: str | Path | None, base: Path) -> Path | None:
     if value is None:
         return None
@@ -147,16 +145,107 @@ def resolve_path(value: str | Path | None, base: Path) -> Path | None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Start IDA MCP multi-session server (cross-platform)")
     parser.add_argument("--config", type=Path, default=Path(__file__).parent / "config.toml", help="Path to config.toml")
-    parser.add_argument("--port", type=int, default=None, help="Main MCP HTTP port")
-    parser.add_argument("--host", default=None, help="Host to bind (default: 127.0.0.1)")
-    parser.add_argument("--base-session-port", type=int, default=None, help="Base port for session workers")
-    parser.add_argument("--analyze-dir", type=Path, default=None, help="Directory containing binaries to preload")
-    parser.add_argument("--ida-dir", type=Path, default=None, help="Optional IDA installation path (sets IDADIR env)")
-    parser.add_argument("--uv", default=None, help="uv executable to use")
-    parser.add_argument("--skip-port-check", action="store_true", help="Start even if the port appears busy")
-    parser.add_argument("--no-preload", action="store_true", help="Do not preload binaries; start empty for manual session creation")
-    parser.add_argument("--mcp-dir", type=Path, default=None, help="Directory containing ida-pro-mcp project (pyproject/uv.lock)")
     return parser
+
+
+def load_runtime_settings(config_path: Path) -> Tuple[Dict[str, Any], Path]:
+    cfg = load_config(config_path)
+    base_dir = config_path.parent
+    settings: Dict[str, Any] = {
+        "mcp_dir": resolve_path(cfg.get("mcp_dir", DEFAULTS["mcp_dir"]), base_dir),
+        "uv_value": cfg.get("uv", DEFAULTS["uv"]),
+        "analyze_dir": resolve_path(cfg.get("analyze_dir", DEFAULTS["analyze_dir"]), base_dir),
+        "host": cfg.get("host", DEFAULTS["host"]),
+        "port": int(cfg.get("port", DEFAULTS["port"])),
+        "base_session_port": int(cfg.get("base_session_port", DEFAULTS["base_session_port"])),
+        "max_sessions": int(cfg.get("max_sessions", DEFAULTS["max_sessions"])),
+        "file_load_timeout": int(cfg.get("file_load_timeout", DEFAULTS["file_load_timeout"])),
+        "ida_dir": resolve_path(cfg.get("ida_dir", DEFAULTS["ida_dir"]), base_dir),
+        "skip_port_check": bool(cfg.get("skip_port_check", False)),
+        "no_preload": bool(cfg.get("no_preload", False)),
+    }
+    return settings, base_dir
+
+
+def resolve_launcher_dependencies(settings: Dict[str, Any]) -> Tuple[Path, str]:
+    mcp_dir = settings["mcp_dir"]
+    if mcp_dir is None or not mcp_dir.is_dir():
+        raise FileNotFoundError(f"MCP directory not found: {mcp_dir}")
+
+    uv_value = settings["uv_value"]
+    uv_path = shutil.which(str(uv_value))
+    if not uv_path:
+        raise FileNotFoundError(f"uv not found (looked for '{uv_value}')")
+
+    return mcp_dir, uv_path
+
+
+def discover_preload_files(analyze_dir: Path | None, no_preload: bool) -> List[str]:
+    if no_preload:
+        return []
+    if analyze_dir is None or not analyze_dir.is_dir():
+        raise FileNotFoundError(f"analyze directory not found: {analyze_dir}")
+
+    files = collect_binaries(analyze_dir)
+    if not files:
+        raise FileNotFoundError(
+            f"No PE/ELF/Mach-O binaries found in {analyze_dir}. "
+            f"Set no_preload = true in config.toml to start empty."
+        )
+    return files
+
+
+def cleanup_ports(port: int, base_session_port: int, max_sessions: int) -> None:
+    kill_port_process(port)
+    for session_port in range(base_session_port, base_session_port + (max_sessions * 2)):
+        kill_port_process(session_port)
+
+
+def validate_main_port(host: str, port: int, skip_port_check: bool) -> None:
+    if not skip_port_check and not port_available(host, port):
+        raise OSError(f"{host}:{port} looks busy. Free it or set skip_port_check = true if intentional.")
+
+
+def build_launch_command(settings: Dict[str, Any], uv_path: str, files: List[str]) -> List[str]:
+    return [
+        uv_path,
+        "run",
+        "idalib-mcp-multisession",
+        "--host",
+        settings["host"],
+        "--port",
+        str(settings["port"]),
+        "--base-session-port",
+        str(settings["base_session_port"]),
+        "--max-sessions",
+        str(settings["max_sessions"]),
+        "--file-load-timeout",
+        str(settings["file_load_timeout"]),
+        "--verbose",
+        *files,
+    ]
+
+
+def print_launch_summary(settings: Dict[str, Any], uv_path: str, mcp_dir: Path, files: List[str]) -> None:
+    print("=== IDA MCP Multi-Session Server ===")
+    print(f"uv: {uv_path}")
+    print(f"MCP dir: {mcp_dir}")
+    print(f"Host: {settings['host']}")
+    print(f"Port: {settings['port']}")
+    print(f"Base session port: {settings['base_session_port']}")
+    print(f"Max sessions: {settings['max_sessions']}")
+    print(f"File load timeout: {settings['file_load_timeout']}s")
+    if settings["ida_dir"]:
+        print(f"IDADIR: {settings['ida_dir']}")
+    if settings["no_preload"]:
+        print("Analyze dir: (skipped, no_preload = true)")
+        print("Files: none (empty start)")
+    else:
+        print(f"Analyze dir: {settings['analyze_dir']}")
+        print("Files:")
+        for file_path in files:
+            print(f"  - {file_path}")
+    print("====================================")
 
 
 def main() -> int:
@@ -164,83 +253,23 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = args.config.resolve()
-    cfg = load_config(config_path)
-    base_dir = config_path.parent
 
-    mcp_dir = resolve_path(pick(args.mcp_dir, cfg.get("mcp_dir"), DEFAULTS["mcp_dir"]), base_dir)
-    if mcp_dir is None or not mcp_dir.is_dir():
-        print(f"[ERROR] MCP directory not found: {mcp_dir}")
-        return 1
-
-    uv_value = pick(args.uv, cfg.get("uv"), DEFAULTS["uv"])
-    uv_path = shutil.which(str(uv_value))
-    if not uv_path:
-        print(f"[ERROR] uv not found (looked for '{uv_value}')")
-        return 1
-
-    analyze_dir = resolve_path(pick(args.analyze_dir, cfg.get("analyze_dir"), DEFAULTS["analyze_dir"]), base_dir)
-    host = pick(args.host, cfg.get("host"), DEFAULTS["host"])
-    port = int(pick(args.port, cfg.get("port"), DEFAULTS["port"]))
-    base_session_port = int(pick(args.base_session_port, cfg.get("base_session_port"), DEFAULTS["base_session_port"]))
-    ida_dir = resolve_path(pick(args.ida_dir, cfg.get("ida_dir"), DEFAULTS["ida_dir"]), base_dir)
-    skip_port_check = args.skip_port_check or bool(cfg.get("skip_port_check", False))
-    no_preload = args.no_preload or bool(cfg.get("no_preload", False))
-
-    files: List[str] = []
-    if not no_preload:
-        if analyze_dir is None or not analyze_dir.is_dir():
-            print(f"[ERROR] analyze directory not found: {analyze_dir}")
-            return 1
-        files = collect_binaries(analyze_dir)
-        if not files:
-            print(f"[ERROR] No PE/ELF binaries found in {analyze_dir}. Use --no-preload to start empty.")
-            return 1
-
-    # Kill any existing processes on the main port and session ports
-    kill_port_process(port)
-    # Also kill processes on session ports (base_session_port to base_session_port + 10)
-    for session_port in range(base_session_port, base_session_port + 10):
-        kill_port_process(session_port)
-
-    if not skip_port_check and not port_available(host, port):
-        print(f"[ERROR] {host}:{port} looks busy. Free it or rerun with --skip-port-check if intentional.")
+    try:
+        settings, _ = load_runtime_settings(config_path)
+        mcp_dir, uv_path = resolve_launcher_dependencies(settings)
+        files = discover_preload_files(settings["analyze_dir"], settings["no_preload"])
+        cleanup_ports(settings["port"], settings["base_session_port"], settings["max_sessions"])
+        validate_main_port(settings["host"], settings["port"], settings["skip_port_check"])
+    except (FileNotFoundError, OSError, ValueError) as e:
+        print(f"[ERROR] {e}")
         return 1
 
     env = os.environ.copy()
-    if ida_dir:
-        env["IDADIR"] = str(ida_dir)
+    if settings["ida_dir"]:
+        env["IDADIR"] = str(settings["ida_dir"])
 
-    cmd = [
-        uv_path,
-        "run",
-        "idalib-mcp-multisession",
-        "--host",
-        host,
-        "--port",
-        str(port),
-        "--base-session-port",
-        str(base_session_port),
-        "--verbose",  # Enable debug logging
-        *files,
-    ]
-
-    print("=== IDA MCP Multi-Session Server ===")
-    print(f"uv: {uv_path}")
-    print(f"MCP dir: {mcp_dir}")
-    print(f"Host: {host}")
-    print(f"Port: {port}")
-    print(f"Base session port: {base_session_port}")
-    if ida_dir:
-        print(f"IDADIR: {ida_dir}")
-    if no_preload:
-        print("Analyze dir: (skipped, --no-preload)")
-        print("Files: none (empty start)")
-    else:
-        print(f"Analyze dir: {analyze_dir}")
-        print("Files:")
-        for f in files:
-            print(f"  - {f}")
-    print("====================================")
+    cmd = build_launch_command(settings, uv_path, files)
+    print_launch_summary(settings, uv_path, mcp_dir, files)
 
     try:
         return subprocess.call(cmd, env=env, cwd=mcp_dir)

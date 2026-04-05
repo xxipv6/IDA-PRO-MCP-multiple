@@ -71,15 +71,15 @@ class Session:
         file_path: str,
         port: int,
         host: str = "127.0.0.1",
-        idb_path: Optional[str] = None,
         auto_analysis: bool = True,
+        file_load_timeout: float = 3600,
     ):
         self.id = session_id
         self.file_path = str(file_path)
         self.port = port
         self.host = host
-        self.idb_path = idb_path
         self.auto_analysis = auto_analysis
+        self.file_load_timeout = file_load_timeout
         self.status = SessionStatus.CREATING
         self.created_at = datetime.now()
         self.error_message: Optional[str] = None
@@ -133,8 +133,6 @@ class Session:
                 "--port", str(self.port),
                 "--ready-file", str(self._ready_event_path),
             ]
-            if self.idb_path:
-                cmd.extend(["--idb-path", self.idb_path])
             if not self.auto_analysis:
                 cmd.append("--no-auto-analysis")
 
@@ -149,7 +147,7 @@ class Session:
 
             # Wait for the process to signal ready (with timeout)
             start_time = time.time()
-            timeout = 3600  # 1 hour
+            timeout = self.file_load_timeout
             while time.time() - start_time < timeout:
                 if self._ready_event_path.exists():
                     # Ready file exists, session is ready
@@ -235,14 +233,14 @@ class SessionManager:
     def __init__(
         self,
         base_port: int = 10000,
-        max_sessions: int = 5,
-        session_timeout: float = 3600,
+        max_sessions: int = 10,
+        file_load_timeout: float = 3600,
         idb_cache_dir: Optional[str] = None,
         host: str = "127.0.0.1",
     ):
         self.base_port = base_port
         self.max_sessions = max_sessions
-        self.session_timeout = session_timeout
+        self.file_load_timeout = file_load_timeout
         self.idb_cache_dir = Path(idb_cache_dir) if idb_cache_dir else None
         self.host = host
 
@@ -277,7 +275,8 @@ class SessionManager:
         """Background loop to clean up idle sessions"""
         while not self._stop_cleanup.is_set():
             try:
-                time.sleep(60)  # Check every minute
+                if self._stop_cleanup.wait(60):
+                    break
                 self._cleanup_idle_sessions()
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}")
@@ -311,7 +310,6 @@ class SessionManager:
     async def create_session(
         self,
         file_path: str,
-        idb_path: Optional[str] = None,
         auto_analysis: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> SessionInfo:
@@ -319,7 +317,6 @@ class SessionManager:
 
         Args:
             file_path: Path to the binary file to analyze
-            idb_path: Optional path for the IDB file
             auto_analysis: Whether to run auto analysis
             metadata: Optional metadata to attach to the session
 
@@ -336,37 +333,22 @@ class SessionManager:
 
         with self._lock:
             if len(self._sessions) >= self.max_sessions:
-                # Try to close an idle session first
-                closed = False
-                for session_id, session in self._sessions.items():
-                    if session.status == SessionStatus.READY:
-                        idle_time = session.get_idle_time()
-                        if idle_time > 300:  # 5 minutes minimum
-                            self._close_session_unlocked(session_id)
-                            closed = True
-                            break
-
-                if not closed or len(self._sessions) >= self.max_sessions:
-                    raise RuntimeError(
-                        f"Maximum sessions ({self.max_sessions}) reached. "
-                        f"Close an existing session first."
-                    )
+                raise RuntimeError(
+                    f"Maximum sessions ({self.max_sessions}) reached. "
+                    f"Close an existing session first."
+                )
 
             # Allocate port and create session
             port = self._allocate_port()
             session_id = str(uuid.uuid4())[:8]
-
-            # Generate IDB path if not provided
-            if idb_path is None and self.idb_cache_dir:
-                idb_path = str(self.idb_cache_dir / f"{session_id}_{file_path_obj.name}.idb")
 
             session = Session(
                 session_id=session_id,
                 file_path=str(file_path_obj),
                 port=port,
                 host=self.host,
-                idb_path=idb_path,
                 auto_analysis=auto_analysis,
+                file_load_timeout=self.file_load_timeout,
             )
 
             if metadata:
@@ -496,22 +478,29 @@ class SessionManager:
             self._close_session_unlocked(session_id)
             return True
 
+    def _close_all_sessions_unlocked(self) -> None:
+        for session_id in list(self._sessions.keys()):
+            self._close_session_unlocked(session_id)
+        self._active_session_id = None
+        self._port_allocator.clear()
+
     async def close_all(self) -> None:
         """Close all sessions"""
         with self._lock:
-            for session_id in list(self._sessions.keys()):
-                self._close_session_unlocked(session_id)
+            self._close_all_sessions_unlocked()
+
+    @property
+    def active_session_id(self) -> Optional[str]:
+        with self._lock:
+            return self._active_session_id
 
     def shutdown(self) -> None:
         """Shutdown the session manager"""
         logger.info("Shutting down session manager")
         self._stop_cleanup.set()
 
-        # Close all sessions
-        for session in list(self._sessions.values()):
-            session.close()
-
-        self._sessions.clear()
+        with self._lock:
+            self._close_all_sessions_unlocked()
 
         if self._cleanup_thread:
             self._cleanup_thread.join(timeout=5)
@@ -531,8 +520,8 @@ def get_session_manager() -> SessionManager:
 
 def init_session_manager(
     base_port: int = 10000,
-    max_sessions: int = 5,
-    session_timeout: float = 3600,
+    max_sessions: int = 10,
+    file_load_timeout: float = 3600,
     idb_cache_dir: Optional[str] = None,
     host: str = "127.0.0.1",
 ) -> SessionManager:
@@ -543,7 +532,7 @@ def init_session_manager(
     _session_manager = SessionManager(
         base_port=base_port,
         max_sessions=max_sessions,
-        session_timeout=session_timeout,
+        file_load_timeout=file_load_timeout,
         idb_cache_dir=idb_cache_dir,
         host=host,
     )

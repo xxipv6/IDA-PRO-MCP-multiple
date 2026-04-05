@@ -10,7 +10,13 @@ host = "0.0.0.0"
 # Base port for session workers
 base_session_port = 10000
 
-# Directory containing binaries to preload (PE/ELF)
+# Maximum concurrent sessions
+max_sessions = 10
+
+# File load initialization timeout in seconds
+file_load_timeout = 3600
+
+# Directory containing binaries to preload (PE/ELF/Mach-O)
 analyze_dir = "analyze"
 
 # IDA installation path (optional). Leave empty to use environment.

@@ -8,17 +8,22 @@ because it runs in the main process, not within IDA. The tool registration
 is handled by MultiSessionMCPServer directly.
 """
 
-import sys
+from importlib import util
 from pathlib import Path
 from typing import Annotated, Optional, Any
 
-# Import session module directly to avoid triggering ida_mcp.__init__.py
-_ida_mcp_dir = str(Path(__file__).parent / "ida_mcp")
-if _ida_mcp_dir not in sys.path:
-    sys.path.insert(0, _ida_mcp_dir)
-import session
-sys.path.pop(sys.path.index(_ida_mcp_dir))
 
+def _load_session_module():
+    session_path = Path(__file__).parent / "ida_mcp" / "session.py"
+    spec = util.spec_from_file_location("ida_pro_mcp_session", session_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Failed to load session module from {session_path}")
+    module = util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+session = _load_session_module()
 get_session_manager = session.get_session_manager
 SessionInfo = session.SessionInfo
 
@@ -31,7 +36,6 @@ SessionInfo = session.SessionInfo
 async def session_create(
     file_path: Annotated[str, "Path to the binary file to analyze"],
     auto_analysis: Annotated[bool, "Whether to run auto-analysis (default: true)"] = True,
-    idb_path: Annotated[Optional[str], "Optional path for the IDB file"] = None,
     metadata: Annotated[Optional[dict[str, Any]], "Optional metadata to attach to the session"] = None,
 ) -> dict:
     """Create a new analysis session for a binary file
@@ -42,7 +46,6 @@ async def session_create(
     Args:
         file_path: Path to the binary file to analyze
         auto_analysis: Whether to run auto-analysis (default: true)
-        idb_path: Optional path for the IDB database file
         metadata: Optional metadata to attach to the session
 
     Returns:
@@ -55,7 +58,6 @@ async def session_create(
     manager = get_session_manager()
     info = await manager.create_session(
         file_path=file_path,
-        idb_path=idb_path,
         auto_analysis=auto_analysis,
         metadata=metadata or {},
     )
@@ -211,7 +213,7 @@ async def session_status() -> dict:
         -> {
             "total_sessions": 2,
             "ready_sessions": 2,
-            "max_sessions": 5,
+            "max_sessions": 10,
             "active_session": "abc123",
             "base_port": 10000
         }
@@ -225,8 +227,7 @@ async def session_status() -> dict:
         "total_sessions": len(sessions),
         "ready_sessions": ready_count,
         "max_sessions": manager.max_sessions,
-        "session_timeout": manager.session_timeout,
-        "active_session": manager._active_session_id,
+        "active_session": manager.active_session_id,
         "base_port": manager.base_port,
         "idb_cache_dir": str(manager.idb_cache_dir) if manager.idb_cache_dir else None,
     }

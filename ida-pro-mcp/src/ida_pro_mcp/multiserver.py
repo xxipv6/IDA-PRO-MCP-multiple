@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import asyncio
+from importlib import util
 import logging
 import signal
 import sys
@@ -20,22 +21,23 @@ import httpx
 
 from . import api_session
 
-# Import session module directly to avoid triggering ida_mcp.__init__.py
-import sys
-from pathlib import Path
-_ida_mcp_dir = str(Path(__file__).parent / "ida_mcp")
-if _ida_mcp_dir not in sys.path:
-    sys.path.insert(0, _ida_mcp_dir)
 
-# Import session (no IDA dependencies)
-import session as _session_module
+def _load_session_module():
+    session_path = Path(__file__).parent / "ida_mcp" / "session.py"
+    spec = util.spec_from_file_location("ida_pro_mcp_session", session_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Failed to load session module from {session_path}")
+    module = util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_session_module = _load_session_module()
 init_session_manager = _session_module.init_session_manager
 get_session_manager = _session_module.get_session_manager
 
 # Import zeromcp (no IDA dependencies)
 from zeromcp import McpServer, McpRpcRegistry, McpHttpRequestHandler, McpToolError
-
-sys.path.pop(sys.path.index(_ida_mcp_dir))  # Clean up
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +50,8 @@ class MultiSessionMCPServer:
         host: str = "127.0.0.1",
         port: int = 8745,
         base_session_port: int = 10000,
-        max_sessions: int = 5,
-        session_timeout: float = 3600,
+        max_sessions: int = 10,
+        file_load_timeout: float = 3600,
         idb_cache_dir: Optional[str] = None,
         unsafe: bool = False,
     ):
@@ -57,14 +59,14 @@ class MultiSessionMCPServer:
         self.port = port
         self.base_session_port = base_session_port
         self.max_sessions = max_sessions
-        self.session_timeout = session_timeout
+        self.file_load_timeout = file_load_timeout
         self.unsafe = unsafe
 
         # Initialize session manager
         self.session_manager = init_session_manager(
             base_port=base_session_port,
             max_sessions=max_sessions,
-            session_timeout=session_timeout,
+            file_load_timeout=file_load_timeout,
             idb_cache_dir=idb_cache_dir,
             host=host,
         )
@@ -93,46 +95,7 @@ class MultiSessionMCPServer:
 
     def _register_proxy_tools(self) -> None:
         """Register proxy tools that forward calls to the active session"""
-
-        async def proxy_tool(
-            tool_name: str,
-            arguments: Optional[dict] = None,
-            session_id: Optional[str] = None,
-        ) -> dict:
-            """Proxy a tool call to the appropriate session"""
-            manager = get_session_manager()
-
-            # Get the target session
-            session = await manager.get_session_for_call(session_id)
-
-            if not session:
-                raise McpToolError(
-                    f"No session available. Create a session with session_create first."
-                )
-
-            # Forward the request to the session's MCP server
-            session_url = f"http://127.0.0.1:{session.port}/mcp"
-
-            try:
-                response = await self.http_client.post(
-                    session_url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "tools/call",
-                        "params": {
-                            "name": tool_name,
-                            "arguments": arguments,
-                        },
-                        "id": 1,
-                    },
-                )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                raise McpToolError(f"Failed to reach session {session.id}: {e}")
-
-        # We'll dynamically register proxy tools based on what tools are available
-        # This is done lazily when a session is created
+        pass
 
     async def proxy_tools_list(self) -> dict:
         """Get the list of tools from the active session"""
@@ -149,7 +112,6 @@ class MultiSessionMCPServer:
                     "properties": {
                         "file_path": {"type": "string"},
                         "auto_analysis": {"type": "boolean"},
-                        "idb_path": {"type": "string"},
                     },
                     "required": ["file_path"],
                 },
@@ -417,14 +379,14 @@ def main():
     parser.add_argument(
         "--max-sessions",
         type=int,
-        default=5,
-        help="Maximum concurrent sessions (default: 5)",
+        default=10,
+        help="Maximum concurrent sessions (default: 10)",
     )
     parser.add_argument(
-        "--session-timeout",
+        "--file-load-timeout",
         type=int,
         default=3600,
-        help="Session idle timeout in seconds (default: 3600)",
+        help="File load initialization timeout in seconds (default: 3600)",
     )
     parser.add_argument(
         "--idb-cache-dir",
@@ -458,7 +420,7 @@ def main():
         port=args.port,
         base_session_port=args.base_session_port,
         max_sessions=args.max_sessions,
-        session_timeout=args.session_timeout,
+        file_load_timeout=args.file_load_timeout,
         idb_cache_dir=args.idb_cache_dir,
         unsafe=args.unsafe,
     )

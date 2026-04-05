@@ -41,7 +41,6 @@ def run_idalib_session(
     file_path: str,
     port: int,
     host: str = "127.0.0.1",
-    idb_path: str | None = None,
     auto_analysis: bool = True,
     ready_file: Path | None = None,
 ) -> None:
@@ -54,7 +53,6 @@ def run_idalib_session(
         file_path: Path to the binary file to analyze
         port: Port number for the MCP server
         host: Host to bind the MCP server to
-        idb_path: Optional path for the IDB file
         auto_analysis: Whether to run auto analysis
         ready_file: Optional path to a file to create when ready
     """
@@ -79,8 +77,6 @@ def run_idalib_session(
 
         # Open database
         logger.info(f"Opening database: {file_path}")
-        if idb_path:
-            logger.info(f"  IDB will be cached at: {idb_path}")
 
         result = idapro.open_database(
             file_path,
@@ -193,7 +189,6 @@ def run_idalib_session_main() -> None:
     parser.add_argument("file_path", type=str, help="Path to binary file")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host for MCP server")
     parser.add_argument("--port", type=int, required=True, help="Port for MCP server")
-    parser.add_argument("--idb-path", type=str, default=None, help="Path for IDB file")
     parser.add_argument(
         "--no-auto-analysis",
         action="store_true",
@@ -211,7 +206,6 @@ def run_idalib_session_main() -> None:
         file_path=args.file_path,
         host=args.host,
         port=args.port,
-        idb_path=args.idb_path,
         auto_analysis=not args.no_auto_analysis,
         ready_file=ready_file,
     )

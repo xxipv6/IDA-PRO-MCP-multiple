@@ -356,7 +356,7 @@ class AutoAnalyzer:
             # 检查服务器连接
             if not await self.server.check_server():
                 logger.error("MCP服务器未运行！")
-                logger.info("请先启动: python start.py --no-preload")
+                logger.info("请先在 config.toml 中设置 no_preload = true，然后启动: python start.py")
                 return
 
             logger.info("已连接到MCP服务器")

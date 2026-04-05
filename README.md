@@ -1,6 +1,6 @@
 # IDA MCP Server 使用说明
 
-支持多文件、多会话并行分析，切记切记切记！mcp连接之后获取到的工具数量是77个！
+支持多文件、多会话并行分析。
 
 ![image-20251229204640370](https://xipv6.oss-cn-hangzhou.aliyuncs.com/img/image-20251229204640370.png)
 
@@ -21,7 +21,7 @@
 | 组件 | Windows | macOS | Linux |
 |------|---------|-------|-------|
 | Python | 3.11+ | 3.11+ | 3.11+ |
-| IDA Pro | 9.2+ | 9.2+ | 9.2+ |
+| IDA Pro | 9.1+（推荐 9.2+） | 9.1+（推荐 9.2+） | 9.1+（推荐 9.2+） |
 | uv | `pip install uv` 或 `pipx install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` 或 `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 
 ### 2. 安装步骤
@@ -73,9 +73,12 @@ uv sync
 编辑根目录 `config.toml`，相对路径相对于该文件解析：
 
 ```toml
-port = 8746                  # MCP 主端口
+port = 8745                  # MCP 主端口
+host = "127.0.0.1"           # 监听地址
 base_session_port = 10000    # 会话起始端口
-analyze_dir = "analyze"      # 预加载的 PE/ELF/MachO 目录
+max_sessions = 10            # 最大会话数量
+file_load_timeout = 3600     # 文件加载初始化超时（秒）
+analyze_dir = "analyze"      # 预加载的 PE/ELF/Mach-O 目录
 ida_dir = ""                 # 可选，IDA 安装路径；留空则使用环境变量 IDADIR
 uv = "uv"                    # uv 可执行文件
 skip_port_check = false      # 跳过端口检查
@@ -96,7 +99,9 @@ ida_dir = "/Applications/IDA Pro 9.2/ida.app/Contents/MacOS"
 ida_dir = "/opt/ida-9.2"
 ```
 
-覆盖优先级：CLI 参数 > `config.toml` > 内置默认
+配置来源：`config.toml` > 内置默认
+
+说明：若 `config.toml` 中未设置 `ida_dir`，则会沿用当前环境中的 `IDADIR`。
 
 ---
 
@@ -111,40 +116,15 @@ ida_dir = "/opt/ida-9.2"
 python start.py
 ```
 
-##### 自定义参数
+除 `--config` 外，运行参数全部从 `config.toml` 读取。
 
-```bash
-# Windows
-python start.py --port 9000 --base-session-port 12000 --analyze-dir ./analyze --ida-dir "C:/Program Files/IDA Pro 9.2"
+如需修改端口、会话数、超时、分析目录、IDA 路径等，请直接编辑 `config.toml`。
 
-# macOS（注意路径中的空格需要转义或引号）
-python start.py --port 9000 --ida-dir "/Applications/IDA Pro 9.2/ida.app/Contents/MacOS"
-
-# Linux
-python start.py --port 9000 --ida-dir "/opt/ida-9.2"
-
-# 跳过端口检查（端口被占用但仍要启动）
-python start.py --skip-port-check
-
-# 空启动（不预载文件，适合手动 session_create）
-python start.py --no-preload
-```
-
-##### 参数说明
-
-| 参数 | 说明 |
-|------|------|
-| `--port` | 主服务器端口 |
-| `--base-session-port` | 会话起始端口 |
-| `--analyze-dir` | 待分析文件夹 |
-| `--ida-dir` | IDA 安装路径（设置 `IDADIR` 环境变量） |
-| `--skip-port-check` | 跳过端口占用检查 |
-| `--no-preload` | 不预载文件，空启动 |
-| `--config` | 指定配置文件路径（默认 `config.toml`） |
+启动前，`start.py` 会尝试清理主端口和会话端口范围上的旧进程。
 
 #### 方式二：手动创建会话
 
-1. 运行 `python start.py --no-preload` 启动空服务器
+1. 在 `config.toml` 中设置 `no_preload = true` 后运行 `python start.py` 启动空服务器
 2. 通过 MCP 调用 `session_create` 创建分析会话
 
 ---
@@ -166,10 +146,10 @@ python start.py --no-preload
 ```json
 {
   "mcpServers": {
-    "ida-mcp": {
+    "ida-auto": {
       "transport": {
         "type": "http",
-        "url": "http://127.0.0.1:8746/mcp"
+        "url": "http://127.0.0.1:8745/mcp"
       }
     }
   }
@@ -181,9 +161,9 @@ python start.py --no-preload
 ```json
 {
   "mcpServers": {
-    "ida-mcp": {
+    "ida-auto": {
       "name": "IDA MCP 服务器",
-      "baseUrl": "http://127.0.0.1:8746/mcp",
+      "baseUrl": "http://127.0.0.1:8745/mcp",
       "type": "http"
     }
   }
@@ -194,31 +174,34 @@ python start.py --no-preload
 
 ## 可用工具
 
-### 会话管理 (6 个)
+### 会话管理工具
 
 | 工具 | 说明 |
 |------|------|
 | `session_create` | 创建新的分析会话 |
 | `session_list` | 列出所有会话 |
+| `session_get` | 获取指定会话详情 |
 | `session_switch` | 切换活动会话 |
 | `session_active` | 获取当前活动会话 |
 | `session_close` | 关闭会话 |
 | `session_status` | 获取会话管理器状态 |
 
-### 分析工具 (71 个)
+### 分析工具
 
-详细工具列表请查看 [AVAILABLE_TOOLS.md](AVAILABLE_TOOLS.md)
+当前版本提供多类分析工具，包含反编译、反汇编、搜索、导出、调试、类型与内存操作等能力。下面是部分类别示例：
 
-| 类别 | 工具数量 | 示例 |
-|------|---------|------|
-| Core | 11 | `idb_meta`, `lookup_funcs`, `list_funcs`, `imports`, `strings` |
-| Analysis | 8 | `decompile`, `disasm`, `xrefs_to`, `callees`, `callers` |
-| Search | 6 | `find_bytes`, `find_insns`, `search`, `basic_blocks` |
-| Export | 4 | `export_funcs`, `callgraph`, `xref_matrix` |
-| Memory | 8 | `get_bytes`, `get_u8/16/32/64`, `patch` |
-| Types | 6 | `structs`, `struct_info`, `infer_types` |
-| Debug | 22 | `dbg_start`, `dbg_step_into`, `dbg_regs` |
-| Python | 1 | `py_eval` |
+| 类别 | 示例 |
+|------|------|
+| Core | `idb_meta`, `lookup_funcs`, `list_funcs`, `imports`, `strings` |
+| Analysis | `decompile`, `disasm`, `xrefs_to`, `callees`, `callers` |
+| Search | `find_bytes`, `find_insns`, `search`, `basic_blocks` |
+| Export | `export_funcs`, `callgraph`, `xref_matrix` |
+| Memory | `get_bytes`, `get_u8/16/32/64`, `patch` |
+| Types | `structs`, `struct_info`, `infer_types` |
+| Debug | `dbg_start`, `dbg_step_into`, `dbg_regs` |
+| Python | `py_eval` |
+| Modify | `rename_local`, `set_comment`, `set_decompiler_comment` |
+| Stack | `stack_frame`, `stack_vars`, `stack_var_xrefs` |
 
 ---
 
@@ -256,7 +239,7 @@ python start.py --no-preload
 
 ```powershell
 # 查看端口占用
-netstat -ano | findstr ":8746"
+netstat -ano | findstr ":8745"
 
 # 终止进程
 taskkill /F /PID <进程ID>
@@ -266,13 +249,13 @@ taskkill /F /PID <进程ID>
 
 ```bash
 # 查看端口占用
-lsof -i :8746
+lsof -i :8745
 
 # 终止进程
 kill -9 <PID>
 
 # 或使用一条命令
-lsof -ti :8746 | xargs kill -9
+lsof -ti :8745 | xargs kill -9
 ```
 
 ### IDB 文件被锁定
@@ -320,13 +303,12 @@ IDA-MCP-Release/
 ├── analyze/               # 放待分析的二进制文件
 │   ├── *.exe             # Windows PE 文件
 │   ├── *.elf / *_elf     # Linux ELF 文件
-│   └── *.bin / *_macho   # macOS MachO 文件
+│   └── *.bin / *_macho   # macOS Mach-O 文件
 ├── ida-pro-mcp/          # MCP 服务器核心
 │   ├── .venv/           # 虚拟环境
 │   └── src/
 ├── start.py              # 跨平台一键启动脚本
 ├── config.toml           # 配置文件
-├── AVAILABLE_TOOLS.md    # 完整工具列表
 └── claude_desktop_config.json
 ```
 
@@ -336,12 +318,12 @@ IDA-MCP-Release/
 
 | 配置项 | 值 |
 |--------|-----|
-| 主服务器端口 | 8746 |
+| 主服务器端口 | 8745 |
 | 会话端口范围 | 10000+ |
 | 协议 | MCP over HTTP (JSON-RPC 2.0) |
-| 最大并发会话 | 5 |
-| 会话超时 | 3600 秒 |
-| 支持的文件格式 | PE (exe/dll), ELF, MachO |
+| 最大并发会话 | 10 |
+| 文件加载超时 | 3600 秒 |
+| 支持的文件格式 | PE (exe/dll), ELF, Mach-O |
 
 ---
 
@@ -349,9 +331,9 @@ IDA-MCP-Release/
 
 ### v2.0.0 (2025-12-30)
 
-- ✅ 修复工具加载问题（现在正确显示 77 个工具）
+- ✅ 修复工具加载问题
 - ✅ 修复会话进程生命周期（使用 blocking 模式）
-- ✅ 所有 71 个分析工具测试通过
+- ✅ 分析工具链路可用
 - ✅ 添加跨平台支持（Windows/macOS/Linux）
 - ✅ 改进错误处理和日志输出
 
