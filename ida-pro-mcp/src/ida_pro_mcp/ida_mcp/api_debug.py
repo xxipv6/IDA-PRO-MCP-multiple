@@ -81,8 +81,22 @@ def _wait_for_suspend(timeout_ms: int = 5000) -> tuple[int, int | None]:
     return wait_rc, ida_dbg.get_ip_val()
 
 
+def _ensure_suspended_state(timeout_ms: int = 5000) -> tuple[int | None, int | None]:
+    state = ida_dbg.get_process_state()
+    if state == ida_dbg.DSTATE_SUSP:
+        return None, ida_dbg.get_ip_val()
+    if state == ida_dbg.DSTATE_RUN:
+        return _wait_for_suspend(timeout_ms)
+    return None, ida_dbg.get_ip_val()
+
+
 def _step_debugger(step_fn, action: str) -> str:
     dbg_ensure_running()
+    pre_wait_rc, ip = _ensure_suspended_state()
+    if ip is None:
+        raise IDAError(
+            f"Failed to {action}: debugger is not suspended (wait_rc={pre_wait_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
+        )
     if step_fn():
         wait_rc, ip = _wait_for_suspend()
         if ip is not None:
@@ -91,7 +105,7 @@ def _step_debugger(step_fn, action: str) -> str:
             f"Failed to {action} to suspended state (wait_rc={wait_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
         )
     raise IDAError(
-        f"Failed to {action} (request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
+        f"Failed to {action} (pre_wait_rc={pre_wait_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
     )
 
 
