@@ -205,7 +205,12 @@ def dbg_exit():
     """Exit debugger"""
     dbg_ensure_running()
     if idaapi.exit_process():
-        return
+        wait_rc = ida_dbg.wait_for_next_event(ida_dbg.WFNE_SUSP, 5000)
+        if ida_dbg.get_ip_val() is None or ida_dbg.get_process_state() == ida_dbg.DSTATE_NOTASK:
+            return
+        raise IDAError(
+            f"Failed to fully exit debugger (wait_rc={wait_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
+        )
     raise IDAError("Failed to exit debugger")
 
 
