@@ -184,7 +184,9 @@ def dbg_start():
         process_args or "",
         process_dir or "",
     )
+    wait_rc = None
     if start_rc == 1:
+        wait_rc = ida_dbg.wait_for_next_event(ida_dbg.WFNE_SUSP, 5000)
         ip = ida_dbg.get_ip_val()
         if ip is not None:
             return hex(ip)
@@ -192,7 +194,7 @@ def dbg_start():
     process_path, _, process_dir, _, _, _ = ida_dbg.get_process_options()
     raise IDAError(
         f"Failed to start debugger for {process_path or '<unknown>'} in {process_dir or '<unknown>'} "
-        f"(start_rc={start_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
+        f"(start_rc={start_rc}, wait_rc={wait_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
     )
 
 
