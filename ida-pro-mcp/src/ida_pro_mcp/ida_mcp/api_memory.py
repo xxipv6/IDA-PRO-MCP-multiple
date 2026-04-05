@@ -387,6 +387,11 @@ def get_global_value(
                 ea = ida_name.get_name_ea(idaapi.BADADDR, query)
 
             if ea == idaapi.BADADDR:
+                if query == "__ImageBase":
+                    results.append(
+                        {"query": query, "value": hex(idaapi.get_imagebase()), "error": None}
+                    )
+                    continue
                 results.append({"query": query, "value": None, "error": "Not found"})
                 continue
 
@@ -417,6 +422,17 @@ def test_get_global_value():
     # May have value or error depending on whether it's a valid global
     # Either value or error should be set
     assert result[0]["value"] is not None or result[0]["error"] is not None
+
+
+@test()
+def test_get_global_value_imagebase():
+    """get_global_value returns image base for __ImageBase even without symbol"""
+    result = get_global_value("__ImageBase")
+    assert_is_list(result, min_length=1)
+    assert_has_keys(result[0], "query", "value", "error")
+    assert result[0]["query"] == "__ImageBase"
+    assert result[0]["value"] == hex(idaapi.get_imagebase())
+    assert result[0]["error"] is None
 
 
 # ============================================================================
