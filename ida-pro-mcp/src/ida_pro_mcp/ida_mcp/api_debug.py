@@ -174,7 +174,12 @@ def dbg_start():
             if addr != ida_idaapi.BADADDR:
                 ida_dbg.add_bpt(addr, 0, idaapi.BPT_SOFT)
 
-    if idaapi.start_process("", "", "") == 1:
+    process_path, process_args, process_dir, _, _, _ = ida_dbg.get_process_options()
+    if idaapi.start_process(
+        process_path or "",
+        process_args or "",
+        process_dir or "",
+    ) == 1:
         ip = ida_dbg.get_ip_val()
         if ip is not None:
             return hex(ip)
