@@ -151,10 +151,12 @@ def lookup_funcs(
             ea = idaapi.BADADDR
 
             # Try as address first if it looks like one
+            parse_error = None
             if looks_like_address(query):
                 try:
                     ea = parse_address(query)
-                except Exception:
+                except Exception as e:
+                    parse_error = str(e)
                     ea = idaapi.BADADDR
 
             # Fall back to name lookup
@@ -172,7 +174,9 @@ def lookup_funcs(
                         {"query": query, "fn": None, "error": "Not a function"}
                     )
             else:
-                results.append({"query": query, "fn": None, "error": "Not found"})
+                results.append(
+                    {"query": query, "fn": None, "error": parse_error or "Not found"}
+                )
         except Exception as e:
             results.append({"query": query, "fn": None, "error": str(e)})
 

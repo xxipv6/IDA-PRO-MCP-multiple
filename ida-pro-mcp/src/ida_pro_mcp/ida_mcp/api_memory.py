@@ -376,10 +376,12 @@ def get_global_value(
             ea = idaapi.BADADDR
 
             # Try as address first if it looks like one
+            parse_error = None
             if looks_like_address(query):
                 try:
                     ea = parse_address(query)
-                except Exception:
+                except Exception as e:
+                    parse_error = str(e)
                     ea = idaapi.BADADDR
 
             # Fall back to name lookup
@@ -392,7 +394,9 @@ def get_global_value(
                         {"query": query, "value": hex(idaapi.get_imagebase()), "error": None}
                     )
                     continue
-                results.append({"query": query, "value": None, "error": "Not found"})
+                results.append(
+                    {"query": query, "value": None, "error": parse_error or "Not found"}
+                )
                 continue
 
             if query == "__ImageBase":
