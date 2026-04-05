@@ -336,12 +336,11 @@ def get_global_variable_value_internal(ea: int) -> str:
         if strlit is not None:
             return f'"{strlit.decode("utf-8", errors="replace").strip()}"'
 
-    if has_type:
+    size = ida_bytes.get_item_size(ea)
+    if size == 0 and has_type:
         size = tif.get_size()
-    else:
-        size = ida_bytes.get_item_size(ea)
-        if size == 0:
-            raise IDAError(f"Failed to get type information for variable at {ea:#x}")
+    if size == 0:
+        raise IDAError(f"Failed to get type information for variable at {ea:#x}")
 
     if size == 1:
         return hex(ida_bytes.get_byte(ea))
