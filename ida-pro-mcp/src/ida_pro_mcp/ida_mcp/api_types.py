@@ -21,6 +21,7 @@ from .utils import (
     StructureDefinition,
     StructRead,
     TypeApplication,
+    decompile_function_safe,
 )
 from .tests import (
     test,
@@ -667,19 +668,7 @@ def infer_types(
             ea = parse_address(addr)
             tif = ida_typeinf.tinfo_t()
 
-            # Try Hex-Rays inference
-            if ida_hexrays.init_hexrays_plugin() and ida_hexrays.guess_tinfo(tif, ea):
-                results.append(
-                    {
-                        "addr": addr,
-                        "inferred_type": str(tif),
-                        "method": "hexrays",
-                        "confidence": "high",
-                    }
-                )
-                continue
-
-            # Try getting existing type info
+            # Try getting existing type info first
             if ida_nalt.get_tinfo(tif, ea):
                 results.append(
                     {
@@ -690,6 +679,31 @@ def infer_types(
                     }
                 )
                 continue
+
+            # If this is a function, try decompilation-backed inference
+            func = idaapi.get_func(ea)
+            if func:
+                decompiled = decompile_function_safe(func.start_ea)
+                if decompiled is not None:
+                    if ida_nalt.get_tinfo(tif, func.start_ea) and tif.is_func():
+                        results.append(
+                            {
+                                "addr": addr,
+                                "inferred_type": str(tif),
+                                "method": "decompiler_existing",
+                                "confidence": "high",
+                            }
+                        )
+                    else:
+                        results.append(
+                            {
+                                "addr": addr,
+                                "inferred_type": "function",
+                                "method": "decompiler_detected",
+                                "confidence": "medium",
+                            }
+                        )
+                    continue
 
             # Try to guess from size
             size = ida_bytes.get_item_size(ea)
