@@ -390,6 +390,10 @@ def get_global_value(
                 results.append({"query": query, "value": None, "error": "Not found"})
                 continue
 
+            if query == "__ImageBase":
+                results.append({"query": query, "value": hex(ea), "error": None})
+                continue
+
             value = get_global_variable_value_internal(ea)
             results.append({"query": query, "value": value, "error": None})
         except Exception as e:
