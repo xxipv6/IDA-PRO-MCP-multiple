@@ -8,22 +8,11 @@ because it runs in the main process, not within IDA. The tool registration
 is handled by MultiSessionMCPServer directly.
 """
 
-from importlib import util
-from pathlib import Path
+from ._session_loader import load_session_module
 from typing import Annotated, Optional, Any
 
 
-def _load_session_module():
-    session_path = Path(__file__).parent / "ida_mcp" / "session.py"
-    spec = util.spec_from_file_location("ida_pro_mcp_session", session_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Failed to load session module from {session_path}")
-    module = util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-session = _load_session_module()
+session = load_session_module()
 get_session_manager = session.get_session_manager
 SessionInfo = session.SessionInfo
 

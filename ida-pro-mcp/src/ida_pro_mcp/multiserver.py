@@ -10,7 +10,6 @@ Usage:
 
 import argparse
 import asyncio
-from importlib import util
 import logging
 import signal
 import sys
@@ -20,19 +19,10 @@ from typing import Any, Callable, Optional
 import httpx
 
 from . import api_session
+from ._session_loader import load_session_module
 
 
-def _load_session_module():
-    session_path = Path(__file__).parent / "ida_mcp" / "session.py"
-    spec = util.spec_from_file_location("ida_pro_mcp_session", session_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Failed to load session module from {session_path}")
-    module = util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_session_module = _load_session_module()
+_session_module = load_session_module()
 init_session_manager = _session_module.init_session_manager
 get_session_manager = _session_module.get_session_manager
 
