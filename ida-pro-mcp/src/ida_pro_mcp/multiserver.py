@@ -36,8 +36,12 @@ _session_module = _load_session_module()
 init_session_manager = _session_module.init_session_manager
 get_session_manager = _session_module.get_session_manager
 
-# Import vendored zeromcp implementation
-from .ida_mcp.zeromcp import McpServer, McpRpcRegistry, McpHttpRequestHandler, McpToolError
+_zeromcp_dir = str(Path(__file__).parent / "ida_mcp")
+if _zeromcp_dir not in sys.path:
+    sys.path.insert(0, _zeromcp_dir)
+from zeromcp import McpServer, McpRpcRegistry, McpHttpRequestHandler, McpToolError
+if _zeromcp_dir in sys.path:
+    sys.path.remove(_zeromcp_dir)
 
 logger = logging.getLogger(__name__)
 
