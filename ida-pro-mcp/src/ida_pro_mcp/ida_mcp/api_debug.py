@@ -76,6 +76,25 @@ def dbg_ensure_running() -> "ida_idd.debugger_t":
     return dbg
 
 
+def _wait_for_suspend(timeout_ms: int = 5000) -> tuple[int, int | None]:
+    wait_rc = ida_dbg.wait_for_next_event(ida_dbg.WFNE_SUSP, timeout_ms)
+    return wait_rc, ida_dbg.get_ip_val()
+
+
+def _step_debugger(step_fn, action: str) -> str:
+    dbg_ensure_running()
+    if step_fn():
+        wait_rc, ip = _wait_for_suspend()
+        if ip is not None:
+            return hex(ip)
+        raise IDAError(
+            f"Failed to {action} to suspended state (wait_rc={wait_rc}, request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
+        )
+    raise IDAError(
+        f"Failed to {action} (request_error={ida_dbg.dbg_request_error}, process_state={ida_dbg.get_process_state()})"
+    )
+
+
 def _get_registers_for_thread(dbg: "ida_idd.debugger_t", tid: int) -> ThreadRegisters:
     """Helper to get registers for a specific thread."""
     regs = []
@@ -248,12 +267,7 @@ def dbg_run_to(
 @unsafe
 def dbg_step_into():
     """Step into"""
-    dbg_ensure_running()
-    if idaapi.step_into():
-        ip = ida_dbg.get_ip_val()
-        if ip is not None:
-            return hex(ip)
-    raise IDAError("Failed to step into")
+    return _step_debugger(idaapi.step_into, "step into")
 
 
 @tool
@@ -261,12 +275,7 @@ def dbg_step_into():
 @unsafe
 def dbg_step_over():
     """Step over"""
-    dbg_ensure_running()
-    if idaapi.step_over():
-        ip = ida_dbg.get_ip_val()
-        if ip is not None:
-            return hex(ip)
-    raise IDAError("Failed to step over")
+    return _step_debugger(idaapi.step_over, "step over")
 
 
 # ============================================================================
