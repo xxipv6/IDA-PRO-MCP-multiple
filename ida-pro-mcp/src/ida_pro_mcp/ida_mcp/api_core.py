@@ -326,14 +326,17 @@ def int_convert(
         try:
             bytes_data = value.to_bytes(size, "little", signed=True)
         except OverflowError:
-            results.append(
-                {
-                    "input": text,
-                    "result": None,
-                    "error": f"Number {text} is too big for {size} bytes",
-                }
-            )
-            continue
+            try:
+                bytes_data = value.to_bytes(size, "little", signed=False)
+            except OverflowError:
+                results.append(
+                    {
+                        "input": text,
+                        "result": None,
+                        "error": f"Number {text} is too big for {size} bytes",
+                    }
+                )
+                continue
 
         ascii_str = ""
         for byte in bytes_data.rstrip(b"\x00"):
@@ -393,6 +396,16 @@ def test_int_convert_invalid_text():
     assert result[0]["result"] is None
     assert result[0]["error"] is not None
     assert "Invalid number" in result[0]["error"]
+
+
+@test()
+def test_int_convert_large_plain_hex_text():
+    """int_convert accepts plain hex text that needs unsigned byte conversion"""
+    result = int_convert({"text": "81bd48985fa1753e"})
+    assert_is_list(result, min_length=1)
+    assert result[0]["error"] is None
+    assert result[0]["result"] is not None
+    assert result[0]["result"]["hexadecimal"] == "0x81bd48985fa1753e"
 
 
 @test()
