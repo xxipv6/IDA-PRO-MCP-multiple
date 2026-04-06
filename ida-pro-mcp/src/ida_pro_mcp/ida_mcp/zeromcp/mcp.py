@@ -132,7 +132,6 @@ class McpServer:
         self.tools = McpRpcRegistry()
         self.resources = McpRpcRegistry()
         self.prompts = McpRpcRegistry()
-        self._tool_lock = threading.Lock()  # Serialize tool calls for IDA API safety
 
         self._http_server: HTTPServer | None = None
         self._server_thread: threading.Thread | None = None
@@ -163,14 +162,21 @@ class McpServer:
             return self.resources.method(func)
         return decorator
 
-    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler):
+    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler, threaded = None):
         if self._running:
             print("[MCP] Server is already running")
             return
 
+        # Use threaded server for concurrent request handling
+        # Default: threaded when background=True (proxy),
+        #          single-threaded when background=False (IDA workers
+        #          need execute_sync on main thread)
+        use_threaded = threaded if threaded is not None else background
+
         # Create server with deferred binding
         assert issubclass(request_handler, McpHttpRequestHandler)
-        self._http_server = ThreadingHTTPServer(
+        server_class = ThreadingHTTPServer if use_threaded else HTTPServer
+        self._http_server = server_class(
             (host, port), request_handler, bind_and_activate=False
         )
         self._http_server.allow_reuse_address = True
