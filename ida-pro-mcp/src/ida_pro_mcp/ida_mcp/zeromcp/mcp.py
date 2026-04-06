@@ -137,6 +137,7 @@ class McpServer:
         self._server_thread: threading.Thread | None = None
         self._running = False
         self._protocol_version = threading.local()
+        self._tool_lock = threading.Lock()
 
         # Register MCP protocol methods with correct names
         self.registry = JsonRpcRegistry()

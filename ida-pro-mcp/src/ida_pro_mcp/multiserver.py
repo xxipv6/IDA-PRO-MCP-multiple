@@ -231,6 +231,14 @@ class MultiSessionMCPServer:
                 json_response = response.json()
                 if "result" in json_response:
                     return json_response["result"]
+                if "error" in json_response:
+                    error = json_response["error"]
+                    error_msg = error.get("message", "Unknown session error")
+                    logger.error(f"Session {session.id} returned error: {error_msg}")
+                    return {
+                        "content": [{"type": "text", "text": f"Session error: {error_msg}"}],
+                        "isError": True,
+                    }
                 return json_response
             except httpx.HTTPError as e:
                 logger.error(f"Failed to call tool {name} on session {session.id}: {e}")
