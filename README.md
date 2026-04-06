@@ -329,6 +329,14 @@ IDA-MCP-Release/
 
 ## 更新日志
 
+### v2.0.1 (2026-04-06)
+
+- ✅ 修复会话端口 TIME_WAIT 后无法重绑（`allow_reuse_address`）
+- ✅ 修复多会话代理超时对齐（50s proxy timeout，小于客户端 ~60s）
+- ✅ 修复 IDA session worker 线程模型（单线程 HTTPServer + `execute_sync` 兼容）
+- ✅ 多会话代理使用线程化 HTTP 服务器，支持并发客户端请求
+- ✅ 移除 multiserver 中无用的 `_register_session_tools` / `_register_proxy_tools`
+
 ### v2.0.0 (2026-04-05)
 
 - ✅ 修复工具加载问题
