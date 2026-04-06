@@ -68,25 +68,9 @@ class MultiSessionMCPServer:
         # Create MCP server
         self.mcp_server = McpServer("ida-pro-mcp-multisession", version="2.0.0")
 
-        # Register session management tools
-        self._register_session_tools()
-
-        # Register proxy tools that forward to active session
-        self._register_proxy_tools()
-
         logger.info(f"Multi-session MCP server initialized on {host}:{port}")
         logger.info(f"  Base session port: {base_session_port}")
         logger.info(f"  Max sessions: {max_sessions}")
-
-    def _register_session_tools(self) -> None:
-        """Register session management tools (direct implementation)"""
-        # Session tools are handled directly in _handle_session_tool
-        # No need to register here since we handle them in the proxy layer
-        pass
-
-    def _register_proxy_tools(self) -> None:
-        """Register proxy tools that forward calls to the active session"""
-        pass
 
     async def proxy_tools_list(self) -> dict:
         """Get the list of tools from the active session"""
@@ -155,7 +139,7 @@ class MultiSessionMCPServer:
         session_url = f"http://127.0.0.1:{session.port}/mcp"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
                 response = await http_client.post(
                     session_url,
                     json={
@@ -218,7 +202,7 @@ class MultiSessionMCPServer:
 
         try:
             logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
-            async with httpx.AsyncClient(timeout=30.0) as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
                 response = await http_client.post(
                     session_url,
                     json={

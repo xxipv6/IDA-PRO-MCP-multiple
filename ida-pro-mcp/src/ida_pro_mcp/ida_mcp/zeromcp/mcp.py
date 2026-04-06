@@ -169,7 +169,7 @@ class McpServer:
 
         # Create server with deferred binding
         assert issubclass(request_handler, McpHttpRequestHandler)
-        self._http_server = (ThreadingHTTPServer if background else HTTPServer)(
+        self._http_server = ThreadingHTTPServer(
             (host, port), request_handler, bind_and_activate=False
         )
         self._http_server.allow_reuse_address = False
