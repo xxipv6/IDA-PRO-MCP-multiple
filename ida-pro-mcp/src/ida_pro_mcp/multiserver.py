@@ -57,9 +57,11 @@ class MultiSessionMCPServer:
         self.file_load_timeout = file_load_timeout
         self.unsafe = unsafe
 
-        # Per-session busy tracking to avoid piling requests on single-threaded workers
-        self._busy_sessions: set[str] = set()
-        self._busy_lock = threading.Lock()
+        # Per-session queue locks: requests to the same session are serialized
+        # (single-threaded worker), Multiple agents can queue up and
+        # each gets the full timeout window.
+        self._session_locks: dict[str, threading.Lock] = {}
+        self._session_locks_lock = threading.Lock()
 
         # Initialize session manager
         self.session_manager = init_session_manager(
@@ -205,23 +207,17 @@ class MultiSessionMCPServer:
 
         session_url = f"http://127.0.0.1:{session.port}/mcp"
 
-        # Reject if session is already busy (single-threaded worker can't handle concurrent requests)
-        with self._busy_lock:
-            if session.id in self._busy_sessions:
-                return {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Session {session.id} is busy processing another request. Please retry in a moment.",
-                        }
-                    ],
-                    "isError": True,
-                }
-            self._busy_sessions.add(session.id)
+        # Acquire per-session lock — requests queue here instead of being rejected.
+        # Each request gets the full timeout once it reaches the front of the queue.
+        with self._session_locks_lock:
+            lock = self._session_locks.get(session.id)
+            if lock is None:
+                lock = threading.Lock()
+                self._session_locks[session.id] = lock
 
-        try:
+        with lock:
             logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=50, write=10, pool=10)) as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
                 response = await http_client.post(
                     session_url,
                     json={
@@ -236,9 +232,6 @@ class MultiSessionMCPServer:
                 )
             logger.debug(f"Response status: {response.status_code}, body: {response.text[:500]}")
             response.raise_for_status()
-            # Extract the actual result from the JSON-RPC response
-            # Session server returns: {"result": {"content": [...], "structuredContent": {...}, "isError": false}}
-            # We need to return just the inner result, not wrap it again
             json_response = response.json()
             if "result" in json_response:
                 return json_response["result"]
@@ -266,9 +259,6 @@ class MultiSessionMCPServer:
                 ],
                 "isError": True,
             }
-        finally:
-            with self._busy_lock:
-                self._busy_sessions.discard(session.id)
 
     async def _handle_session_tool(self, name: str, arguments: Optional[dict]) -> dict:
         """Handle session management tool calls"""
