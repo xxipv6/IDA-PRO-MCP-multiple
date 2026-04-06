@@ -316,9 +316,9 @@ class MultiSessionMCPServer:
         self.mcp_server.registry.methods["tools/list"] = wrapped_tools_list
         self.mcp_server.registry.methods["tools/call"] = wrapped_tools_call
 
-        # Start the server
+        # Start the server (always threaded to handle concurrent client requests)
         logger.info(f"Starting multi-session MCP server on {self.host}:{self.port}")
-        self.mcp_server.serve(host=self.host, port=self.port, background=background)
+        self.mcp_server.serve(host=self.host, port=self.port, background=background, threaded=True)
 
     async def shutdown(self) -> None:
         """Shutdown the server and close all sessions"""

@@ -162,14 +162,21 @@ class McpServer:
             return self.resources.method(func)
         return decorator
 
-    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler):
+    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler, threaded = None):
         if self._running:
             print("[MCP] Server is already running")
             return
 
+        # Determine whether to use threaded server
+        # Default: threaded when background=True (multi-request proxy),
+        #          single-threaded when background=False (IDA session workers
+        #          need execute_sync on main thread)
+        use_threaded = threaded if threaded is not None else background
+
         # Create server with deferred binding
         assert issubclass(request_handler, McpHttpRequestHandler)
-        self._http_server = ThreadingHTTPServer(
+        server_class = ThreadingHTTPServer if use_threaded else HTTPServer
+        self._http_server = server_class(
             (host, port), request_handler, bind_and_activate=False
         )
         self._http_server.allow_reuse_address = True
