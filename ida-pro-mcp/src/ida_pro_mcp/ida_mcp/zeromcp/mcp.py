@@ -132,6 +132,7 @@ class McpServer:
         self.tools = McpRpcRegistry()
         self.resources = McpRpcRegistry()
         self.prompts = McpRpcRegistry()
+        self._tool_lock = threading.Lock()  # Serialize tool calls for IDA API safety
 
         self._http_server: HTTPServer | None = None
         self._server_thread: threading.Thread | None = None
@@ -162,21 +163,14 @@ class McpServer:
             return self.resources.method(func)
         return decorator
 
-    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler, threaded = None):
+    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler):
         if self._running:
             print("[MCP] Server is already running")
             return
 
-        # Determine whether to use threaded server
-        # Default: threaded when background=True (multi-request proxy),
-        #          single-threaded when background=False (IDA session workers
-        #          need execute_sync on main thread)
-        use_threaded = threaded if threaded is not None else background
-
         # Create server with deferred binding
         assert issubclass(request_handler, McpHttpRequestHandler)
-        server_class = ThreadingHTTPServer if use_threaded else HTTPServer
-        self._http_server = server_class(
+        self._http_server = ThreadingHTTPServer(
             (host, port), request_handler, bind_and_activate=False
         )
         self._http_server.allow_reuse_address = True
@@ -293,13 +287,14 @@ class McpServer:
 
     def _mcp_tools_call(self, name: str, arguments: dict | None = None, _meta: dict | None = None) -> dict:
         """MCP tools/call method"""
-        # Wrap tool call in JSON-RPC request
-        tool_response = self.tools.dispatch({
-            "jsonrpc": "2.0",
-            "method": name,
-            "params": arguments,
-            "id": None,
-        })
+        # Serialize tool calls for IDA API thread safety
+        with self._tool_lock:
+            tool_response = self.tools.dispatch({
+                "jsonrpc": "2.0",
+                "method": name,
+                "params": arguments,
+                "id": None,
+            })
         assert tool_response is not None, "Only notification requests return None"
 
         # Check for error response

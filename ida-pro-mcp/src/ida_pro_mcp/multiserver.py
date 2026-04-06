@@ -139,7 +139,7 @@ class MultiSessionMCPServer:
         session_url = f"http://127.0.0.1:{session.port}/mcp"
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=50, write=10, pool=10)) as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
                 response = await http_client.post(
                     session_url,
                     json={
@@ -202,7 +202,7 @@ class MultiSessionMCPServer:
 
         try:
             logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=50, write=10, pool=10)) as http_client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
                 response = await http_client.post(
                     session_url,
                     json={
@@ -318,7 +318,7 @@ class MultiSessionMCPServer:
 
         # Start the server (always threaded to handle concurrent client requests)
         logger.info(f"Starting multi-session MCP server on {self.host}:{self.port}")
-        self.mcp_server.serve(host=self.host, port=self.port, background=background, threaded=True)
+        self.mcp_server.serve(host=self.host, port=self.port, background=background)
 
     async def shutdown(self) -> None:
         """Shutdown the server and close all sessions"""
