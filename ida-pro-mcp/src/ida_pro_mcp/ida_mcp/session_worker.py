@@ -161,10 +161,13 @@ def run_idalib_session(
 
         logger.info(f"MCP server starting on port {port}")
 
+        # Signal ready before starting the blocking serve call
+        signal_ready()
+        logger.info(f"Session ready signal sent, starting MCP server")
+
         # Start the MCP server in blocking mode (runs on main thread)
-        # Signal ready AFTER bind succeeds so parent knows the HTTP server is reachable
         try:
-            MCP_SERVER.serve(host=host, port=port, background=False, on_bound=signal_ready)
+            MCP_SERVER.serve(host=host, port=port, background=False)
         finally:
             # Clean shutdown when serve() returns
             logger.info("MCP server stopped, closing IDA database...")
