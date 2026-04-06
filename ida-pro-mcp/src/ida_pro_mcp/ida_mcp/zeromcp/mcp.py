@@ -162,7 +162,7 @@ class McpServer:
             return self.resources.method(func)
         return decorator
 
-    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler):
+    def serve(self, host: str, port: int, *, background = True, request_handler = McpHttpRequestHandler, on_bound = None):
         if self._running:
             print("[MCP] Server is already running")
             return
@@ -172,7 +172,7 @@ class McpServer:
         self._http_server = ThreadingHTTPServer(
             (host, port), request_handler, bind_and_activate=False
         )
-        self._http_server.allow_reuse_address = False
+        self._http_server.allow_reuse_address = True
 
         # Set the MCPServer instance on the handler class
         setattr(self._http_server, "mcp_server", self)
@@ -189,6 +189,10 @@ class McpServer:
 
         # Only start thread after successful bind
         self._running = True
+
+        # Notify caller that server is bound and ready to accept connections
+        if on_bound:
+            on_bound()
 
         print("[MCP] Server started:")
         print(f"  HTTP: http://{host}:{port}/mcp")
