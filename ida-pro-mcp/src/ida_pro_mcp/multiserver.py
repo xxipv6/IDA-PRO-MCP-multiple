@@ -196,12 +196,7 @@ class MultiSessionMCPServer:
             session = await manager.get_session_for_call(session_id)
         except RuntimeError as e:
             return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": str(e),
-                    }
-                ],
+                "content": [{"type": "text", "text": str(e)}],
                 "isError": True,
             }
 
@@ -216,49 +211,40 @@ class MultiSessionMCPServer:
                 self._session_locks[session.id] = lock
 
         with lock:
-            logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
-                response = await http_client.post(
-                    session_url,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "tools/call",
-                        "params": {
-                            "name": name,
-                            "arguments": arguments,
+            try:
+                logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
+                async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
+                    response = await http_client.post(
+                        session_url,
+                        json={
+                            "jsonrpc": "2.0",
+                            "method": "tools/call",
+                            "params": {
+                                "name": name,
+                                "arguments": arguments,
+                            },
+                            "id": 1,
                         },
-                        "id": 1,
-                    },
-                )
-            logger.debug(f"Response status: {response.status_code}, body: {response.text[:500]}")
-            response.raise_for_status()
-            json_response = response.json()
-            if "result" in json_response:
-                return json_response["result"]
-            return json_response
-        except httpx.HTTPError as e:
-            logger.error(f"Failed to call tool {name} on session {session.id}: {e}")
-            logger.error(f"Session URL: {session_url}, Session status: {session.status.value}")
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"Failed to reach session {session.id}: {e}",
-                    }
-                ],
-                "isError": True,
-            }
-        except Exception as e:
-            logger.exception(f"Unexpected error calling tool {name} on session {session.id}: {e}")
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"Unexpected error: {e}",
-                    }
-                ],
-                "isError": True,
-            }
+                    )
+                logger.debug(f"Response status: {response.status_code}, body: {response.text[:500]}")
+                response.raise_for_status()
+                json_response = response.json()
+                if "result" in json_response:
+                    return json_response["result"]
+                return json_response
+            except httpx.HTTPError as e:
+                logger.error(f"Failed to call tool {name} on session {session.id}: {e}")
+                logger.error(f"Session URL: {session_url}, Session status: {session.status.value}")
+                return {
+                    "content": [{"type": "text", "text": f"Failed to reach session {session.id}: {e}"}],
+                    "isError": True,
+                }
+            except Exception as e:
+                logger.exception(f"Unexpected error calling tool {name} on session {session.id}: {e}")
+                return {
+                    "content": [{"type": "text", "text": f"Unexpected error: {e}"}],
+                    "isError": True,
+                }
 
     async def _handle_session_tool(self, name: str, arguments: Optional[dict]) -> dict:
         """Handle session management tool calls"""
