@@ -57,11 +57,19 @@ def run_idalib_session(
         ready_file: Optional path to a file to create when ready
     """
 
-    def signal_ready() -> None:
-        """Signal that the session is ready"""
+    def signal_ready(message: str = "ok") -> None:
+        """Signal the parent process about the startup outcome.
+
+        Writes "ok" on success, or "error: <message>" on failure so the
+        parent can tell a failed initialization apart from a ready session
+        (and surface the actual reason).
+        """
         if ready_file:
-            ready_file.touch()
-            logger.debug(f"Created ready file: {ready_file}")
+            try:
+                ready_file.write_text(message, encoding="utf-8")
+            except OSError:
+                pass
+            logger.debug(f"Wrote ready file: {ready_file} ({message!r})")
 
     try:
         # Setup logging
@@ -72,7 +80,7 @@ def run_idalib_session(
         # Verify file exists
         if not Path(file_path).exists():
             logger.error(f"File not found: {file_path}")
-            signal_ready()
+            signal_ready(f"error: File not found: {file_path}")
             return
 
         # Open database
@@ -85,7 +93,7 @@ def run_idalib_session(
 
         if result:
             logger.error(f"Failed to open database: {file_path} (error code: {result})")
-            signal_ready()  # Signal even on failure so parent doesn't hang
+            signal_ready(f"error: Failed to open database (code {result}): {file_path}")
             return
 
         # Wait for auto analysis to complete
@@ -176,7 +184,7 @@ def run_idalib_session(
 
     except Exception as e:
         logger.exception(f"Error in IDALib session: {e}")
-        signal_ready()  # Signal even on error
+        signal_ready(f"error: {e}")
         sys.exit(1)
 
 

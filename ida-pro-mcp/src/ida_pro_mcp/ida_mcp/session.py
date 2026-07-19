@@ -5,10 +5,7 @@ simultaneously, each analyzing a different binary file.
 """
 
 import asyncio
-import ctypes
 import logging
-import multiprocessing
-import os
 import subprocess
 import sys
 import threading
@@ -18,8 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
-from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +141,41 @@ class Session:
                 text=True,
             )
 
-            # Wait for the process to signal ready (with timeout)
+            # Wait for the process to signal ready (with timeout).
+            # The worker writes "ok" on success, or "error: <message>" when
+            # initialization failed, so a failed startup is never mistaken
+            # for a ready session.
             start_time = time.time()
             timeout = self.file_load_timeout
             while time.time() - start_time < timeout:
                 if self._ready_event_path.exists():
-                    # Ready file exists, session is ready
-                    self._ready_event_path.unlink()
+                    try:
+                        signal = self._ready_event_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        ).strip()
+                    except OSError:
+                        signal = ""
+                    try:
+                        self._ready_event_path.unlink()
+                    except OSError:
+                        pass
+                    if signal.startswith("error:"):
+                        self.status = SessionStatus.ERROR
+                        self.error_message = (
+                            signal[len("error:"):].strip()
+                            or "IDA worker failed to initialize"
+                        )
+                        logger.error(
+                            f"Session {self.id} failed to initialize: {self.error_message}"
+                        )
+                        if self._process:
+                            try:
+                                self._process.wait(timeout=10)
+                            except subprocess.TimeoutExpired:
+                                self._process.terminate()
+                        raise RuntimeError(
+                            f"Session {self.id} failed to initialize: {self.error_message}"
+                        )
                     break
                 if self._process.poll() is not None:
                     # Process has terminated
@@ -360,9 +384,12 @@ class SessionManager:
             if self._active_session_id is None:
                 self._active_session_id = session_id
 
-        # Start the session outside the lock (may take time)
+        # Start the session outside the lock (may take time).
+        # Run in an executor so the caller's event loop stays responsive —
+        # session.start() blocks until IDA finishes loading the file.
         try:
-            session.start()
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, session.start)
         except Exception as e:
             # Clean up on failure
             with self._lock:
@@ -472,11 +499,18 @@ class SessionManager:
             True if session was closed, False if not found
         """
         with self._lock:
-            session = self._sessions.get(session_id)
+            session = self._sessions.pop(session_id, None)
             if not session:
                 return False
-            self._close_session_unlocked(session_id)
-            return True
+            if self._active_session_id == session_id:
+                self._active_session_id = None
+            self._release_port(session.port)
+
+        # Terminating the worker can block for seconds; keep the caller's
+        # event loop responsive.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, session.close)
+        return True
 
     def _close_all_sessions_unlocked(self) -> None:
         for session_id in list(self._sessions.keys()):

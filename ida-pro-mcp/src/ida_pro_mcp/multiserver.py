@@ -60,8 +60,16 @@ class MultiSessionMCPServer:
         # Per-session queue locks: requests to the same session are serialized
         # (single-threaded worker), Multiple agents can queue up and
         # each gets the full timeout window.
-        self._session_locks: dict[str, threading.Lock] = {}
+        # These are asyncio locks because all proxy work runs on a single
+        # dedicated event loop (see serve()) — a threading.Lock held across
+        # an await would freeze that loop.
+        self._session_locks: dict[str, asyncio.Lock] = {}
         self._session_locks_lock = threading.Lock()
+
+        # Dedicated event loop in its own thread. Request threads submit
+        # coroutines to it instead of building a throwaway loop per request.
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop_thread: Optional[threading.Thread] = None
 
         # Initialize session manager
         self.session_manager = init_session_manager(
@@ -102,6 +110,17 @@ class MultiSessionMCPServer:
                 "name": "session_list",
                 "description": "List all analysis sessions",
                 "inputSchema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "session_get",
+                "description": "Get detailed information about a specific session",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string"},
+                    },
+                    "required": ["session_id"],
+                },
             },
             {
                 "name": "session_switch",
@@ -207,10 +226,10 @@ class MultiSessionMCPServer:
         with self._session_locks_lock:
             lock = self._session_locks.get(session.id)
             if lock is None:
-                lock = threading.Lock()
+                lock = asyncio.Lock()
                 self._session_locks[session.id] = lock
 
-        with lock:
+        async with lock:
             try:
                 logger.debug(f"Sending request to {session_url} for tool {name} with args: {arguments}")
                 async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as http_client:
@@ -276,6 +295,15 @@ class MultiSessionMCPServer:
 
         try:
             result = await func(**(arguments or {}))
+
+            # Drop the per-session queue lock when a session is closed so the
+            # lock dict doesn't grow unbounded over the server's lifetime.
+            if name == "session_close" and arguments:
+                closed_id = arguments.get("session_id")
+                if closed_id:
+                    with self._session_locks_lock:
+                        self._session_locks.pop(closed_id, None)
+
             # Convert result to string for content
             result_str = str(result)
 
@@ -299,25 +327,37 @@ class MultiSessionMCPServer:
                 "isError": True,
             }
 
+    def _start_event_loop(self) -> None:
+        """Start the dedicated event loop thread (idempotent)"""
+        if self._loop is not None:
+            return
+        loop = asyncio.new_event_loop()
+        self._loop = loop
+        self._loop_thread = threading.Thread(
+            target=loop.run_forever, name="mcp-async-loop", daemon=True
+        )
+        self._loop_thread.start()
+
+    def _run_async(self, coro):
+        """Run a coroutine on the shared loop from a request thread"""
+        if self._loop is None:
+            raise RuntimeError("Event loop not started")
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result()
+
     def serve(self, background: bool = True) -> None:
         """Start the MCP server"""
-        # Patch the MCP server's tools/list and tools/call methods
-        # Note: The HTTP server is synchronous, so we need to run async code in an event loop
+        self._start_event_loop()
+
+        # Patch the MCP server's tools/list and tools/call methods.
+        # The HTTP server is synchronous (one thread per request), so each
+        # request submits its coroutine to the shared event loop and blocks
+        # on the result — no per-request loop creation.
         def wrapped_tools_list(_meta=None):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(self.proxy_tools_list())
-            finally:
-                loop.close()
+            return self._run_async(self.proxy_tools_list())
 
         def wrapped_tools_call(name, arguments=None, _meta=None):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(self.proxy_tools_call(name, arguments, _meta))
-            finally:
-                loop.close()
+            return self._run_async(self.proxy_tools_call(name, arguments, _meta))
 
         self.mcp_server.registry.methods["tools/list"] = wrapped_tools_list
         self.mcp_server.registry.methods["tools/call"] = wrapped_tools_call
@@ -330,6 +370,13 @@ class MultiSessionMCPServer:
         """Shutdown the server and close all sessions"""
         logger.info("Shutting down multi-session MCP server")
         self.session_manager.shutdown()
+        if self._loop is not None:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            if self._loop_thread is not None:
+                self._loop_thread.join(timeout=5)
+                self._loop_thread = None
+            self._loop.close()
+            self._loop = None
 
 
 def main():
