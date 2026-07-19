@@ -131,6 +131,12 @@ python start.py
 
 ## MCP 配置
 
+### Claude Code
+
+```bash
+claude mcp add --transport http idamcp --scope project http://127.0.0.1:8745/mcp
+```
+
 ### Claude Desktop
 
 **配置文件位置：**
@@ -308,8 +314,7 @@ IDA-MCP-Release/
 │   ├── .venv/           # 虚拟环境
 │   └── src/
 ├── start.py              # 跨平台一键启动脚本
-├── config.toml           # 配置文件
-└── claude_desktop_config.json
+└── config.toml           # 配置文件
 ```
 
 ---
