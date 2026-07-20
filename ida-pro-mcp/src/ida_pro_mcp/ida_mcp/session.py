@@ -136,11 +136,20 @@ class Session:
 
             # Start the subprocess
             # Note: We don't capture stdout/stderr so logs go to console
+            popen_kwargs: Dict[str, Any] = {}
+            if sys.platform == "win32":
+                # Give the worker its own process group so console Ctrl+C
+                # does NOT reach it. Shutdown is then driven solely by the
+                # parent's graceful worker_shutdown request — otherwise the
+                # worker starts closing its IDB on its own while the parent
+                # may hard-kill it mid-close.
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
             self._process = subprocess.Popen(
                 cmd,
                 stdout=None,  # Inherit stdout from parent
                 stderr=None,  # Inherit stderr from parent
                 text=True,
+                **popen_kwargs,
             )
 
             # Wait for the process to signal ready (with timeout).
@@ -217,6 +226,12 @@ class Session:
         import json
         import urllib.request
 
+        # The worker may bind a wildcard address (e.g. 0.0.0.0), which is
+        # listen-only — connect via loopback instead.
+        connect_host = self.host
+        if connect_host in ("", "0.0.0.0", "::"):
+            connect_host = "127.0.0.1"
+
         try:
             body = json.dumps({
                 "jsonrpc": "2.0",
@@ -225,7 +240,7 @@ class Session:
                 "id": 1,
             }).encode()
             req = urllib.request.Request(
-                f"http://{self.host}:{self.port}/mcp",
+                f"http://{connect_host}:{self.port}/mcp",
                 data=body,
                 headers={"Content-Type": "application/json"},
             )
