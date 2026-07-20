@@ -69,6 +69,7 @@ class Session:
         host: str = "127.0.0.1",
         auto_analysis: bool = True,
         file_load_timeout: float = 3600,
+        graceful_shutdown_timeout: float = 120,
     ):
         self.id = session_id
         self.file_path = str(file_path)
@@ -76,6 +77,7 @@ class Session:
         self.host = host
         self.auto_analysis = auto_analysis
         self.file_load_timeout = file_load_timeout
+        self.graceful_shutdown_timeout = graceful_shutdown_timeout
         self.status = SessionStatus.CREATING
         self.created_at = datetime.now()
         self.error_message: Optional[str] = None
@@ -206,8 +208,38 @@ class Session:
             self.status = SessionStatus.READY
             logger.info(f"Session {self.id} ready on port {self.port}")
 
+    def _request_graceful_shutdown(self, timeout: float = 5) -> bool:
+        """Ask the worker to close the IDA database and exit on its own.
+
+        Returns True only if the worker accepted the request (older workers
+        without the worker_shutdown tool return a JSON-RPC error -> False).
+        """
+        import json
+        import urllib.request
+
+        try:
+            body = json.dumps({
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": "worker_shutdown", "arguments": {}},
+                "id": 1,
+            }).encode()
+            req = urllib.request.Request(
+                f"http://{self.host}:{self.port}/mcp",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                result = json.loads(resp.read())
+            return "error" not in result
+        except Exception as e:
+            logger.debug(f"Graceful shutdown request for session {self.id} failed: {e}")
+            return False
+
     def close(self) -> None:
-        """Close the session and terminate the IDA process"""
+        """Close the session: ask the worker to shut down gracefully first
+        (so the IDB is flushed and closed cleanly), escalate to a hard kill
+        only if that fails or takes too long."""
         with self._lock:
             if self.status == SessionStatus.CLOSED:
                 return
@@ -217,13 +249,25 @@ class Session:
 
             if self._process:
                 if self._process.poll() is None:  # Process is still running
-                    self._process.terminate()
-                    try:
-                        self._process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        logger.warning(f"Force killing session {self.id}")
-                        self._process.kill()
-                        self._process.wait(timeout=5)
+                    graceful = self._request_graceful_shutdown()
+                    if graceful:
+                        try:
+                            self._process.wait(timeout=self.graceful_shutdown_timeout)
+                            logger.info(f"Session {self.id} worker exited gracefully")
+                        except subprocess.TimeoutExpired:
+                            logger.warning(
+                                f"Session {self.id} graceful shutdown timed out "
+                                f"after {self.graceful_shutdown_timeout}s, terminating"
+                            )
+                            graceful = False
+                    if not graceful:
+                        self._process.terminate()
+                        try:
+                            self._process.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            logger.warning(f"Force killing session {self.id}")
+                            self._process.kill()
+                            self._process.wait(timeout=5)
                 self._process = None
 
             # Clean up ready file if it exists
@@ -261,12 +305,14 @@ class SessionManager:
         file_load_timeout: float = 3600,
         idb_cache_dir: Optional[str] = None,
         host: str = "127.0.0.1",
+        graceful_shutdown_timeout: float = 120,
     ):
         self.base_port = base_port
         self.max_sessions = max_sessions
         self.file_load_timeout = file_load_timeout
         self.idb_cache_dir = Path(idb_cache_dir) if idb_cache_dir else None
         self.host = host
+        self.graceful_shutdown_timeout = graceful_shutdown_timeout
 
         self._sessions: Dict[str, Session] = {}
         self._port_allocator: set = set()
@@ -373,6 +419,7 @@ class SessionManager:
                 host=self.host,
                 auto_analysis=auto_analysis,
                 file_load_timeout=self.file_load_timeout,
+                graceful_shutdown_timeout=self.graceful_shutdown_timeout,
             )
 
             if metadata:

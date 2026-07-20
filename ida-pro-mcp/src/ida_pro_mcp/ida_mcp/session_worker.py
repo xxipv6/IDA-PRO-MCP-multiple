@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 from pathlib import Path
 
 # Must be imported before any ida* imports when using idalib
@@ -160,6 +161,17 @@ def run_idalib_session(
         from ida_pro_mcp.ida_mcp.rpc import set_download_base_url, MCP_SERVER
 
         set_download_base_url(f"http://{host}:{port}")
+
+        # Internal control tool: lets the parent process ask this worker to
+        # shut down gracefully so the IDA database is closed cleanly instead
+        # of being hard-killed (which leaves the IDB dirty/corrupt).
+        # stop() must run on a separate thread: this handler executes inside
+        # serve_forever(), and HTTPServer.shutdown() would deadlock otherwise.
+        @MCP_SERVER.tool
+        def worker_shutdown() -> dict:
+            """Internal: gracefully stop this session worker (closes the IDA database)."""
+            threading.Thread(target=MCP_SERVER.stop, daemon=True).start()
+            return {"stopping": True}
 
         # Log how many tools are registered
         num_tools = len(MCP_SERVER.tools.methods)
