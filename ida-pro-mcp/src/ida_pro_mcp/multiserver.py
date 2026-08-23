@@ -21,6 +21,7 @@ import httpx
 
 from . import api_session
 from ._session_loader import load_session_module
+from .tool_manifest import load_analysis_tools
 
 
 _session_module = load_session_module()
@@ -35,6 +36,72 @@ if _zeromcp_dir in sys.path:
     sys.path.remove(_zeromcp_dir)
 
 logger = logging.getLogger(__name__)
+
+
+def _build_session_tools() -> list[dict]:
+    """Session management tool definitions (always served locally)"""
+    return [
+        {
+            "name": "session_create",
+            "description": "Create a new analysis session",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "auto_analysis": {"type": "boolean"},
+                },
+                "required": ["file_path"],
+            },
+        },
+        {
+            "name": "session_list",
+            "description": "List all analysis sessions",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "session_get",
+            "description": "Get detailed information about a specific session",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                },
+                "required": ["session_id"],
+            },
+        },
+        {
+            "name": "session_switch",
+            "description": "Switch the active session",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                },
+                "required": ["session_id"],
+            },
+        },
+        {
+            "name": "session_close",
+            "description": "Close an analysis session",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string"},
+                },
+                "required": ["session_id"],
+            },
+        },
+        {
+            "name": "session_active",
+            "description": "Get the active session",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "session_status",
+            "description": "Get session manager status",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+    ]
 
 
 class MultiSessionMCPServer:
@@ -83,78 +150,40 @@ class MultiSessionMCPServer:
         # Create MCP server
         self.mcp_server = McpServer("ida-pro-mcp-multisession", version="2.0.0")
 
+        # Load analysis tool schemas locally (no IDA needed) so tools/list
+        # always exposes the full tool set, even with no active session.
+        # Falls back to proxying tools/list to the active session on failure.
+        try:
+            self._analysis_tools: Optional[list] = load_analysis_tools()
+            logger.info(f"Loaded {len(self._analysis_tools)} analysis tool schemas")
+        except Exception:
+            logger.exception(
+                "Failed to load analysis tool schemas locally; "
+                "tools/list will fall back to proxying the active session"
+            )
+            self._analysis_tools = None
+
         logger.info(f"Multi-session MCP server initialized on {host}:{port}")
         logger.info(f"  Base session port: {base_session_port}")
         logger.info(f"  Max sessions: {max_sessions}")
 
     async def proxy_tools_list(self) -> dict:
-        """Get the list of tools from the active session"""
+        """Return the full tool list: session management tools + analysis tools.
+
+        Analysis tool schemas are loaded locally at startup (see
+        tool_manifest), so the complete list is served even with no
+        active session — e.g. an empty no_preload start, where the client
+        still needs the analysis tools visible to work with sessions it
+        creates later.
+        """
+        session_tools = _build_session_tools()
+
+        if self._analysis_tools is not None:
+            return {"tools": session_tools + self._analysis_tools}
+
+        # Fallback (local schema load failed): proxy to the active session
         manager = get_session_manager()
         session = await manager.get_active_session()
-
-        # Session management tools definition
-        session_tools = [
-            {
-                "name": "session_create",
-                "description": "Create a new analysis session",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {"type": "string"},
-                        "auto_analysis": {"type": "boolean"},
-                    },
-                    "required": ["file_path"],
-                },
-            },
-            {
-                "name": "session_list",
-                "description": "List all analysis sessions",
-                "inputSchema": {"type": "object", "properties": {}},
-            },
-            {
-                "name": "session_get",
-                "description": "Get detailed information about a specific session",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "session_id": {"type": "string"},
-                    },
-                    "required": ["session_id"],
-                },
-            },
-            {
-                "name": "session_switch",
-                "description": "Switch the active session",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "session_id": {"type": "string"},
-                    },
-                    "required": ["session_id"],
-                },
-            },
-            {
-                "name": "session_close",
-                "description": "Close an analysis session",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "session_id": {"type": "string"},
-                    },
-                    "required": ["session_id"],
-                },
-            },
-            {
-                "name": "session_active",
-                "description": "Get the active session",
-                "inputSchema": {"type": "object", "properties": {}},
-            },
-            {
-                "name": "session_status",
-                "description": "Get session manager status",
-                "inputSchema": {"type": "object", "properties": {}},
-            },
-        ]
 
         if not session:
             # Return only session management tools when no session is active
