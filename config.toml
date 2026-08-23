@@ -21,7 +21,7 @@ analyze_dir = "analyze"
 
 # IDA installation path (optional). Leave empty to use environment.
 # Use forward slashes to avoid escape issues on Windows
-ida_dir = "/Applications/IDA.app/Contents/MacOS"
+ida_dir = "/opt/ida-pro-9.3"
 
 # uv executable to use
 uv = "uv"
@@ -30,7 +30,7 @@ uv = "uv"
 skip_port_check = false
 
 # Start without preloading files (manual session_create)
-no_preload = false
+no_preload = true
 
 # Path to ida-pro-mcp project (contains pyproject/uv.lock)
 mcp_dir = "ida-pro-mcp"
